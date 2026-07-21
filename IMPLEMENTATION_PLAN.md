@@ -139,6 +139,17 @@ Stage 1 只完成设计与可行性检查，未生成正式 split manifest、未
 
 **成本**：数据处理秒级至数分钟；开发+测试约 2-4 人时。
 
+**Stage 2 并行协作安排**
+
+- 阶段集成分支为 `integration/stage2`，由 Technical Lead 维护；个人分支通过 Pull Request 进入该分支，普通成员不直接 push。
+- 王家兴使用 `feat/core-pipeline-lr`，负责配置、`feature_hash_v1`、group-aware split、manifest、train-only 预处理、Feature Sets A/B/C、Logistic Regression 和 Test Set Guard。
+- Evaluation 成员可在 `feat/evaluation` 中立即使用合成数据实现纯指标/阈值函数和单元测试，不读取 independent test。
+- Data Analysis 成员可在 `feat/data-analysis` 中立即实现 EDA 与数据图生成代码；raw data 仅保留在本地，图表和中间数据不提交。
+- Documentation and Presentation 成员可在 `docs/presentation` 中准备复现说明、实验日志模板、references、英文讲稿框架和 Q&A，不填写未生成的指标。
+- Forest 和 XGBoost 成员可先审查统一接口或写 synthetic smoke tests，但正式 wrapper 集成、调参和运行必须等待 manifest loader、Feature Set B schema、preprocessing 输出和 estimator contract 锁定。
+- 合并门禁依次为：配置合同 → manifest/组隔离 → preprocessing/features → metrics/thresholds → LR 纵向切片 → RF/BRF/XGBoost 集成。
+- 更详细的文件责任、Test Set 权限和 Q&A 分工见 `docs/TEAM_WORKFLOW.md`。
+
 ### Stage 3 — Unified Evaluation + Logistic Regression Vertical Slice
 
 **目标**

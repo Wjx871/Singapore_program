@@ -66,4 +66,5 @@ artifacts/
 *.temp
 *.bak
 *.swp
+.~*
 ~$*
