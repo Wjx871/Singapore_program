@@ -1,0 +1,285 @@
+schema_version: 1
+experiment_name: credit_default_group_aware_v1
+status: stage_1_locked_for_stage_2
+
+reproducibility:
+  random_seed: 42
+  split_seed_test: 42
+  split_seed_validation: 43
+  cv_seed: 44
+  python_min_version: "3.10"
+
+data:
+  labeled_path: "原始数据集（Give Me Some Credit）/archive/cs-training.csv"
+  official_unlabeled_test_path: "原始数据集（Give Me Some Credit）/archive/cs-test.csv"
+  raw_labeled_sha256: "1bd46da486a5708c58c7b01a034fae2a13b327f6f7b62ea7ba4fe3b5824b24ac"
+  target_column: SeriousDlqin2yrs
+  source_id_column: "Unnamed: 0"
+  id_column: row_id
+  official_test_used_for_metrics: false
+  use_all_labeled_rows: true
+  predictor_columns:
+    - RevolvingUtilizationOfUnsecuredLines
+    - age
+    - NumberOfTime30-59DaysPastDueNotWorse
+    - DebtRatio
+    - MonthlyIncome
+    - NumberOfOpenCreditLinesAndLoans
+    - NumberOfTimes90DaysLate
+    - NumberRealEstateLoansOrLines
+    - NumberOfTime60-89DaysPastDueNotWorse
+    - NumberOfDependents
+
+duplicates:
+  main_strategy: keep
+  group_identical_predictors: true
+  conflicting_target_groups: keep_group_together_and_report
+  deduplication_sensitivity: optional
+
+feature_hash:
+  version: feature_hash_v1
+  algorithm: sha256
+  include_columns: predictor_columns_in_declared_order
+  exclude_columns:
+    - row_id
+    - SeriousDlqin2yrs
+  missing_token: "<NA>"
+  integer_encoding: canonical_decimal
+  float_encoding: ieee754_binary64_python_float_hex
+  field_separator: ascii_unit_separator_0x1f
+
+split:
+  method: two_stage_stratified_group_kfold
+  groups_column: feature_hash
+  n_splits: 5
+  shuffle: true
+  ratios:
+    train: 0.64
+    validation: 0.16
+    test: 0.20
+  fold_selection:
+    method: lexicographic_data_only
+    criteria:
+      - absolute_sample_fraction_error
+      - absolute_positive_rate_error
+      - lowest_fold_index
+  tolerances:
+    sample_fraction_absolute: 0.005
+    positive_rate_absolute: 0.001
+    row_id_overlap: 0
+    feature_hash_overlap: 0
+  fallback:
+    allow_ordinary_random_split: false
+    method: explicit_deterministic_group_constrained_assignment
+    fail_before_fallback: true
+  manifest_path: data/processed/split_manifest.csv
+  metadata_path: data/processed/split_metadata.json
+  manifest_columns:
+    - row_id
+    - split
+    - feature_hash
+    - target
+  manifest_target_source_column: SeriousDlqin2yrs
+
+preprocessing:
+  fit_scope: training_only
+  abnormal_delinquency:
+    columns:
+      - NumberOfTime30-59DaysPastDueNotWorse
+      - NumberOfTime60-89DaysPastDueNotWorse
+      - NumberOfTimes90DaysLate
+    abnormal_values: [96, 98]
+    main_strategy: missing_plus_flag
+    flag_column: HasAbnormalDelinquencyCode
+    imputation: median
+    sensitivity_strategies:
+      - keep_raw
+      - missing_plus_flag
+  missing_values:
+    MonthlyIncome:
+      imputation: median
+      add_indicator: true
+      indicator_column: MonthlyIncomeMissingFlag
+      preserve_zero: true
+    NumberOfDependents:
+      imputation: median
+      add_indicator: true
+      indicator_column: DependentsMissingFlag
+  age:
+    invalid_rule: value_less_than_or_equal_to_zero
+    invalid_to_missing: true
+    imputation: median
+    add_indicator: false
+  winsorization:
+    enabled: true
+    fit_scope: training_only
+    lower_quantile: null
+    upper_quantile: 0.99
+    columns:
+      - RevolvingUtilizationOfUnsecuredLines
+      - DebtRatio
+      - MonthlyIncome
+  scaling:
+    logistic_regression: standard_scaler_numeric_nonbinary
+    tree_models: none
+
+feature_sets:
+  A_raw_baseline:
+    purpose: baseline_with_mandatory_data_quality_flags
+    include_raw_predictors: true
+    additional_columns:
+      - MonthlyIncomeMissingFlag
+      - DependentsMissingFlag
+      - HasAbnormalDelinquencyCode
+    include_delinquency_score: false
+  B_safe_engineered:
+    purpose: main_model_comparison
+    extends: A_raw_baseline
+    additional_columns:
+      - IncomePerDependent
+      - LogMonthlyIncome
+      - HighDebtFlag
+    include_delinquency_score: false
+  C_delinquency_score_ablation:
+    purpose: ablation_only
+    base: B_safe_engineered
+    score_formula: "x30_59 + 3*x60_89 + 5*x90_plus"
+    variants:
+      - raw_delinquency_fields_without_score
+      - score_without_raw_delinquency_fields
+      - raw_delinquency_fields_plus_score
+
+class_imbalance:
+  smote_in_mvp: false
+  logistic_regression:
+    main: balanced
+    compare: [none, balanced]
+  random_forest:
+    main: balanced_subsample
+    compare: [none, balanced_subsample]
+  balanced_random_forest:
+    main: balanced_bootstrap_per_tree
+    compare_against: random_forest
+  xgboost:
+    main: training_partition_negative_to_positive_ratio
+    compare: [1.0, training_partition_negative_to_positive_ratio]
+
+models:
+  integration_order:
+    - logistic_regression
+    - random_forest
+    - balanced_random_forest
+    - xgboost
+  logistic_regression:
+    c_values: [0.03, 0.1, 0.3, 1.0, 3.0]
+    penalties: [l2]
+    max_iter: 5000
+  random_forest:
+    n_estimators: [300, 600]
+    max_depth: [null, 12]
+    min_samples_leaf: [2, 5]
+    max_features: [sqrt]
+  balanced_random_forest:
+    implementation: imblearn.ensemble.BalancedRandomForestClassifier
+    n_estimators: [300, 600]
+    max_depth: [null, 12]
+    min_samples_leaf: [2, 5]
+    max_features: [sqrt]
+    record_effective_sampling_parameters: true
+  xgboost:
+    max_candidate_combinations: 12
+    learning_rate: [0.03, 0.08]
+    max_depth: [3, 5]
+    min_child_weight: [1, 5]
+    subsample: [0.8]
+    colsample_bytree: [0.8]
+  optional_models:
+    lightgbm:
+      tier: legacy_or_optional_appendix_only
+      included_in_mvp: false
+      included_in_primary_presentation: false
+      old_200_trial_search_allowed: false
+
+cross_validation:
+  method: StratifiedGroupKFold
+  n_splits: 5
+  shuffle: true
+  random_state: 44
+  groups_column: feature_hash
+  primary_scoring: average_precision
+
+metrics:
+  positive_label: 1
+  primary: pr_auc
+  pr_auc_implementation: average_precision_score
+  secondary:
+    - roc_auc
+    - ks
+  threshold_dependent:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - specificity
+    - balanced_accuracy
+    - confusion_matrix
+    - predicted_positive_rate
+  optional:
+    - brier_score
+    - calibration_curve
+
+thresholds:
+  report_default_threshold: true
+  default_threshold: 0.5
+  operational:
+    selection_split: validation
+    recall_minimum: 0.75
+    objective: maximize_precision
+    include_all_positive_candidate: true
+    tie_breakers:
+      - maximize_recall
+      - maximize_threshold
+    infeasible_action: raise_implementation_error
+    allow_test_adjustment: false
+
+model_selection:
+  selection_split: validation
+  ordered_considerations:
+    - pr_auc
+    - roc_auc
+    - operational_precision_with_recall_constraint
+    - runtime
+    - interpretability
+  allow_test_based_reselection: false
+
+early_stopping:
+  allowed_models: [xgboost]
+  allowed_eval_splits: [train, validation]
+  forbidden_eval_splits: [test]
+  best_iteration_source: validation
+
+test_access:
+  policy: sealed_after_manifest_generation
+  development_runner_can_load_test: false
+  require_frozen_evaluation_specification: true
+  allow_test_for_tuning: false
+  allow_test_for_threshold_selection: false
+  allow_test_for_calibration_fit: false
+
+runtime_measurement:
+  clock: time.perf_counter
+  fields:
+    - search_time_seconds
+    - final_fit_time_seconds
+    - validation_inference_time_seconds
+    - test_inference_time_seconds
+    - test_inference_microseconds_per_row
+
+outputs:
+  model_comparison: outputs/metrics/model_comparison.csv
+  experiment_summary: outputs/metadata/experiment_summary.json
+  best_model_parameters: outputs/metadata/best_model_parameters.json
+  figures_dir: outputs/figures
+  models_dir: outputs/models
+  logs_dir: outputs/logs
+  predictions_dir: outputs/predictions

@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+.conda/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+credentials/
+
+# Raw and generated data
+data/raw/*
+data/interim/*
+data/processed/*
+!data/README.md
+原始数据集（Give Me Some Credit）/
+submission/dataset/
+
+# Outputs and models
+outputs/
+logs/
+models/
+checkpoints/
+artifacts/
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+*.bin
+*.model
+
+# Legacy reports and presentation (specific files only)
+/第九组实验报告.docx
+/第九组实验报告.pdf
+/第九组答辩ppt.pptx
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+~$*
