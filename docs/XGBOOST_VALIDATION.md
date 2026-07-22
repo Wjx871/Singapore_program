@@ -3,7 +3,8 @@
 > **Branch**: `feat/xgboost`
 > **Base**: `integration/stage2`
 > **Author**: Member A
-> **Date**: 2026-07-22
+> **Formal run date**: 2026-07-23
+> **Formal-run Git SHA**: `3a16ae3ca691c083105b4121c054b2c423d13ba1`
 
 ## 1. Scope
 
@@ -22,9 +23,16 @@ sealed.
 | Evaluation split | validation |
 | Manifest SHA-256 | `5c7aed175ae534f22b051e0b6375469aea71c16d3f28e07a97a60dffb4d520b5` |
 | Raw data SHA-256 | `1bd46da486a5708c58c7b01a034fae2a13b327f6f7b62ea7ba4fe3b5824b24ac` |
+| Parsed config SHA-256 | `896e0f677764c5e456b55a46791e4099fa0767865bd50e46f22df88a2572b86a` |
+| Config file SHA-256 | `1e7c95b016c3a6a807bcd28cde9313f708d3a73b479301ad58369c1e2bffbf02` |
 | Training rows | 95,995 |
 | Validation rows | 23,997 |
 | Independent Test rows | 30,008 |
+
+The formal run used macOS 26.5.1 on arm64, Python 3.12.13, NumPy 2.2.6,
+pandas 2.3.3, scikit-learn 1.7.2, PyYAML 6.0.3, joblib 1.5.2,
+XGBoost 3.0.5, and imbalanced-learn 0.14.0. Homebrew libomp 22.1.8
+provided the macOS OpenMP runtime required by XGBoost.
 
 ## 3. XGBoost Adapter Design
 
@@ -133,7 +141,27 @@ in `tests/test_xgboost_search.py`.
 Results are produced by `python -m scripts.run_xgboost_search` and written to
 `outputs/xgboost_search/candidate_results.csv`. This file is git-ignored.
 
-*(Table populated after formal run with real data.)*
+All eight candidates completed successfully in their pre-declared order. Times
+are local wall-clock measurements and are not portable hardware benchmarks.
+
+| experiment_id | PR-AUC | ROC-AUC | KS | Default P | Default R | Op threshold | Op P | Op R | best iter | rounds | train s | infer s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| xgb_baseline | 0.401323324 | 0.869435127 | 0.583440048 | 0.211911591 | 0.787954831 | 0.541890383 | 0.234234234 | 0.750313676 | 180 | 181 | 0.943825 | 0.011836 |
+| xgb_depth3 | 0.397022241 | 0.869508257 | 0.586883529 | 0.213981245 | 0.787327478 | 0.547832549 | 0.240837696 | 0.750313676 | 356 | 357 | 1.491328 | 0.011711 |
+| xgb_depth5 | 0.399135710 | 0.868807872 | 0.580511852 | 0.216783217 | 0.777917189 | 0.536598265 | 0.236374408 | 0.750941029 | 170 | 171 | 0.995409 | 0.010273 |
+| xgb_lr003 | 0.400976356 | 0.868962337 | 0.589342646 | 0.211155378 | 0.797992472 | 0.544766068 | 0.235502261 | 0.751568381 | 204 | 205 | 1.048716 | 0.010224 |
+| xgb_child5 | 0.401962230 | 0.869935023 | 0.585850356 | 0.211454484 | 0.789836888 | 0.548155665 | 0.238865588 | 0.750313676 | 172 | 173 | 0.920203 | 0.008357 |
+| xgb_child10 | 0.401652256 | 0.869682996 | 0.583923745 | 0.211525538 | 0.789836888 | 0.545511842 | 0.237123613 | 0.750941029 | 173 | 174 | 0.916323 | 0.008218 |
+| xgb_full_rows | 0.400755434 | 0.869360191 | 0.585473855 | 0.214151748 | 0.787954831 | 0.542938292 | 0.238961039 | 0.750313676 | 225 | 226 | 1.083177 | 0.009811 |
+| xgb_full_cols | 0.401118462 | 0.869564501 | 0.584437461 | 0.213084112 | 0.786700125 | 0.546213329 | 0.239775461 | 0.750313676 | 189 | 190 | 0.979775 | 0.007667 |
+
+The fixed baseline produced Validation PR-AUC 0.401323324, ROC-AUC
+0.869435127, and KS 0.583440048. At threshold 0.5 its accuracy was
+0.791265575, precision 0.211911591, recall 0.787954831, F1 0.333998139,
+specificity 0.791501138, balanced accuracy 0.789727984, and predicted-positive
+rate 0.246989207. Its confusion matrix was TN=17,732, FP=4,671, FN=338,
+TP=1,256. Its operational threshold was 0.541890383, with precision
+0.234234234 and recall 0.750313676.
 
 ## 10. Selected Validation Candidate
 
@@ -150,11 +178,40 @@ Written to `outputs/xgboost_search/selected_candidate.json`. Contains:
 - Training and inference time
 - Manifest / config / git SHA
 
+Independent recomputation of the pre-declared rule selected `xgb_child5`,
+matching `selected_candidate.json`. It was the unique candidate within 1e-6 of
+the maximum PR-AUC, so no secondary tie-break was needed.
+
+Selected parameters:
+
+| Parameter | Value |
+|---|---:|
+| n_estimators | 2000 |
+| max_depth | 4 |
+| learning_rate | 0.05 |
+| min_child_weight | 5 |
+| subsample | 0.8 |
+| colsample_bytree | 0.8 |
+| reg_lambda | 1.0 |
+| early_stopping_rounds | 50 |
+| n_jobs | -1 |
+
+Selected Validation metrics: PR-AUC 0.401962230, ROC-AUC 0.869935023, and
+KS 0.585850356.
+
 ## 11. Default Threshold Metrics
 
 Threshold = 0.5. All metrics computed by shared evaluation functions.
 
-*(Populated after formal run.)*
+| Metric | Value |
+|---|---:|
+| Accuracy | 0.790390465 |
+| Precision | 0.211454484 |
+| Recall | 0.789836888 |
+| F1 | 0.333598304 |
+| Specificity | 0.790429853 |
+| Balanced accuracy | 0.790133371 |
+| Predicted-positive rate | 0.248114348 |
 
 ## 12. Operational Threshold Metrics
 
@@ -163,13 +220,25 @@ Selected by shared `select_operational_threshold()`:
 - Maximize Precision
 - Tie-break: higher Recall → higher Threshold
 
-*(Populated after formal run.)*
+The selected threshold was 0.548155665.
+
+| Metric | Value |
+|---|---:|
+| Precision | 0.238865588 |
+| Recall | 0.750313676 |
+| F1 | 0.362369338 |
+| Specificity | 0.829888854 |
+| Balanced accuracy | 0.790101265 |
+| Predicted-positive rate | 0.208651081 |
 
 ## 13. Confusion Matrix
 
 Positive class = 1 (SeriousDlqin2yrs = 1). Columns: TN, FP, FN, TP.
 
-*(Populated after formal run.)*
+| Threshold | TN | FP | FN | TP | Total |
+|---|---:|---:|---:|---:|---:|
+| Default (0.5) | 17,708 | 4,695 | 335 | 1,259 | 23,997 |
+| Operational (0.548155665) | 18,592 | 3,811 | 398 | 1,196 | 23,997 |
 
 ## 14. Runtime
 
@@ -177,7 +246,9 @@ Measured with `time.perf_counter()`:
 - `training_time_seconds`: elapsed during `adapter.fit()`
 - `validation_inference_time_seconds`: elapsed during `adapter.predict_proba()` on Validation
 
-*(Populated after formal run.)*
+For `xgb_child5`, training took 0.920203 seconds and Validation inference took
+0.008357 seconds. The complete 8-candidate search wall time was 11.728801
+seconds in this local environment.
 
 ## 15. best_iteration
 
@@ -187,6 +258,10 @@ Measured with `time.perf_counter()`:
 - actual_boosting_rounds = best_iteration + 1
 - `best_score` is the XGBoost internal aucpr value at best_iteration
 
+For `xgb_child5`, `best_iteration=172`, `actual_boosting_rounds=173`, and
+`best_score=0.401592894`. The latter is XGBoost's internal Validation aucpr,
+not the shared scikit-learn PR-AUC used for candidate selection.
+
 ## 16. Feature Importance
 
 - Type: `gain` (fixed via `importance_type="gain"`)
@@ -195,17 +270,40 @@ Measured with `time.perf_counter()`:
 - No features silently dropped
 - Written to `outputs/xgboost_search/feature_importance.csv`
 
+All 17 Feature Set B features were present exactly once. The top ten were:
+
+| Rank | Feature | Gain importance |
+|---:|---|---:|
+| 1 | RevolvingUtilizationOfUnsecuredLines | 0.263594270 |
+| 2 | NumberOfTimes90DaysLate | 0.203387424 |
+| 3 | NumberOfTime30-59DaysPastDueNotWorse | 0.191988274 |
+| 4 | NumberOfTime60-89DaysPastDueNotWorse | 0.098271936 |
+| 5 | HasAbnormalDelinquencyCode | 0.043177735 |
+| 6 | NumberRealEstateLoansOrLines | 0.041822847 |
+| 7 | age | 0.029721349 |
+| 8 | NumberOfOpenCreditLinesAndLoans | 0.024378022 |
+| 9 | MonthlyIncomeMissingFlag | 0.016617920 |
+| 10 | LogMonthlyIncome | 0.016191671 |
+
+Gain importance measures predictive usage in this fitted model and does not
+establish causality.
+
 ## 17. Comparison with LR/RF/BRF
 
-The four-model comparison will be performed by Member C after all models are
-integrated. Preliminary reference values from prior runs:
+The following values are all formal Validation results on the same frozen
+contract. They are not Independent Test or production results.
 
 | Model | PR-AUC | ROC-AUC | KS | Operational Precision | Operational Recall |
 |---|---|---|---|---|---|
 | Logistic Regression | 0.359228 | 0.827584 | 0.514616 | 0.175753 | 0.750314 |
 | Random Forest | 0.393716 | 0.861110 | 0.572985 | 0.227506 | 0.750314 |
 | Balanced Random Forest | 0.384743 | 0.867921 | 0.587148 | 0.235398 | 0.750941 |
-| **XGBoost** | *(TBD)* | *(TBD)* | *(TBD)* | *(TBD)* | *(TBD)* |
+| **XGBoost (`xgb_child5`)** | **0.401962** | **0.869935** | 0.585850 | **0.238866** | 0.750314 |
+
+XGBoost is the current best Validation PR-AUC model among these four. The
+pre-declared XGBoost candidate selection used only the XGBoost rule in Section
+8; these cross-model values did not trigger any parameter change. BRF retains a
+slightly higher KS (0.587148 versus 0.585850).
 
 ## 18. Test Isolation
 
@@ -223,10 +321,18 @@ finite-value checks on Test features.
 ## 19. Reproducibility
 
 - `random_seed = 42` locked via `set_random_seeds()`
-- `n_jobs = 1` for deterministic tests
+- Formal search used the pre-declared `n_jobs = -1`; synthetic tests use
+  `n_jobs = 1` where deterministic unit-level behavior is required
 - XGBoost `random_state = 42` injected per adapter
 - Determinism verified on synthetic data
 - All metadata includes manifest/config/git SHA
+- Training labels were 89,541 negative and 6,454 positive; every candidate
+  recorded `scale_pos_weight = 13.873721722962504`
+- `python -m compileall -q src scripts tests` passed
+- XGBoost-specific set: 99 passed, 0 skipped, 0 warnings, 0 failures/errors
+- Full repository: 182 passed, 0 skipped, 0 warnings, 0 failures/errors
+- Generated CSV/JSON artifacts remained under git-ignored `outputs/`; no model
+  binary or Validation/Test probability array was saved
 
 ## 20. Limitations
 
