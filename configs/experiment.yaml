@@ -78,6 +78,7 @@ split:
     fail_before_fallback: true
   manifest_path: data/processed/split_manifest.csv
   metadata_path: data/processed/split_metadata.json
+  frozen_manifest_sha256: 5c7aed175ae534f22b051e0b6375469aea71c16d3f28e07a97a60dffb4d520b5
   manifest_columns:
     - row_id
     - split

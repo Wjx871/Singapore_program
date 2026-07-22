@@ -79,6 +79,7 @@ def validate_config(raw: dict[str, Any]) -> None:
         "preprocessing.abnormal_delinquency_strategy",
         "feature_hash.version",
         "split.ratios",
+        "split.frozen_manifest_sha256",
         "feature_sets",
         "thresholds.operational.recall_minimum",
         "metrics.primary",
@@ -141,6 +142,9 @@ def validate_config(raw: dict[str, Any]) -> None:
         )
     if _require(raw, "feature_hash.version") != "feature_hash_v1":
         raise ValueError("Feature hash version must be feature_hash_v1")
+    frozen_manifest = _require(raw, "split.frozen_manifest_sha256")
+    if not isinstance(frozen_manifest, str) or len(frozen_manifest) != 64:
+        raise ValueError("split.frozen_manifest_sha256 must be a 64-character SHA-256")
 
 
 def load_config(path: str | Path = "configs/experiment.yaml") -> ExperimentConfig:
