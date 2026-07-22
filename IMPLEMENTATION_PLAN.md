@@ -405,3 +405,17 @@ Stage 2 已在 `feat/core-pipeline-lr` 完成以下项目：
 未完成且不属于本 Stage 2 纵向切片的项目：Feature Set A/B 正式对照、class-weight 消融、RF/BRF/XGBoost 集成、调参、Independent Test 模型评价和 presentation artifacts。
 
 Stage 3 入口条件：Draft PR 完成对 manifest SHA、Feature Set B 合同、评价 API、Test Guard 和自动化测试的审查；之后其他模型才能共用同一 manifest 和 preprocessing contract。核心模型仍为 LR、RF、BRF、XGBoost，LightGBM 仍仅为 optional/legacy appendix。
+
+## 10. Stage 3 Shared Runner and LR Ablation Status (2026-07-22)
+
+Stage 3 已在 `feat/shared-runner-lr-ablation` 完成：
+
+- 冻结 manifest SHA 并在 Runner/Train-only EDA 入口强制校验，不提供重新 split 路径。
+- 共享 `ExperimentSpec` / `ExperimentResult` / `SharedExperimentRunner` 已锁定 Validation-only 评价合同。
+- 96/98 处理正式支持 `missing_plus_flag` 与 `keep_raw`，两者 schema 和 metadata 显式区分。
+- Train-only EDA 接口只返回 raw Training partition，策略转换复用正式 Preprocessor。
+- E1/E2/E3/S1/S2 所需的四个 LR 配置均已实际运行，没有 Test 模型指标。
+
+基于 Validation，Stage 4/5 推荐默认为 Feature Set B + `class_weight="balanced"` + `missing_plus_flag`。B 的 PR-AUC 为 0.359228，略高于 A 的 0.358020；balanced 在同一 Recall 约束下的 operational Precision 高于 none；`keep_raw` 的 PR-AUC 为 0.304623，显著低于 `missing_plus_flag`。这些是 Validation 选择，不得根据 Independent Test 重新选择。
+
+后续 RF/BRF/XGBoost 入口条件：复用冻结 manifest、Feature Set B、`missing_plus_flag`、共享 metrics/threshold API 和 Test Guard；仅扩展 model factory/estimator adapter，不复制数据或评价流程。

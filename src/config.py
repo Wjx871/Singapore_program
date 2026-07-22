@@ -76,8 +76,10 @@ def validate_config(raw: dict[str, Any]) -> None:
         "reproducibility.split_seed_test",
         "reproducibility.split_seed_validation",
         "preprocessing.abnormal_delinquency.abnormal_values",
+        "preprocessing.abnormal_delinquency_strategy",
         "feature_hash.version",
         "split.ratios",
+        "split.frozen_manifest_sha256",
         "feature_sets",
         "thresholds.operational.recall_minimum",
         "metrics.primary",
@@ -90,6 +92,7 @@ def validate_config(raw: dict[str, Any]) -> None:
         "outputs.logistic_validation_metrics",
         "outputs.logistic_validation_thresholds",
         "outputs.logistic_run_metadata",
+        "experiments",
     ]
     for path in required:
         _require(raw, path)
@@ -133,8 +136,31 @@ def validate_config(raw: dict[str, Any]) -> None:
         raise ValueError("Stage 2 requires test_evaluation_enabled: false")
     if _require(raw, "preprocessing.winsorization.enabled") is not False:
         raise ValueError("Stage 2 baseline requires clipping/winsorization disabled")
+    strategy = _require(raw, "preprocessing.abnormal_delinquency_strategy")
+    if strategy not in {"missing_plus_flag", "keep_raw"}:
+        raise ValueError(
+            "preprocessing.abnormal_delinquency_strategy must be missing_plus_flag or keep_raw"
+        )
     if _require(raw, "feature_hash.version") != "feature_hash_v1":
         raise ValueError("Feature hash version must be feature_hash_v1")
+    frozen_manifest = _require(raw, "split.frozen_manifest_sha256")
+    if not isinstance(frozen_manifest, str) or len(frozen_manifest) != 64:
+        raise ValueError("split.frozen_manifest_sha256 must be a 64-character SHA-256")
+    experiments = _require(raw, "experiments")
+    if not isinstance(experiments, list) or not experiments:
+        raise ValueError("experiments must be a non-empty list")
+    experiment_ids = [item.get("id") for item in experiments if isinstance(item, Mapping)]
+    if len(experiment_ids) != len(experiments) or len(set(experiment_ids)) != len(experiment_ids):
+        raise ValueError("experiments must contain unique IDs")
+    for item in experiments:
+        if item.get("model") != "logistic_regression":
+            raise ValueError("Stage 3 experiment matrix supports only logistic_regression")
+        if item.get("feature_set") not in {"A", "B"}:
+            raise ValueError("Stage 3 experiment feature_set must be A or B")
+        if item.get("preprocessing_strategy") not in {"missing_plus_flag", "keep_raw"}:
+            raise ValueError("Stage 3 experiment preprocessing strategy is invalid")
+        if item.get("class_weight") not in {"balanced", "none"}:
+            raise ValueError("Stage 3 experiment class_weight must be balanced or none")
 
 
 def load_config(path: str | Path = "configs/experiment.yaml") -> ExperimentConfig:
