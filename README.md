@@ -31,8 +31,8 @@ Place local dataset files according to [data/README.md](data/README.md). Do not 
 
 - Stage 0 Repository Audit: completed
 - Stage 1 Experiment Design: completed
-- Stage 2 Data Pipeline Implementation: pending
-- No official model results have been produced by the new pipeline yet
+- Stage 2 Data Pipeline Implementation and Logistic Regression vertical slice: completed on `feat/core-pipeline-lr`
+- Only validation results have been produced; the independent test set remains sealed for model evaluation
 
 Legacy metrics in old reports or scripts are not treated as current, verified results.
 
@@ -47,9 +47,9 @@ Legacy metrics in old reports or scripts are not treated as current, verified re
 ├── data/                    # Local data placement instructions only
 ├── docs/                    # Team collaboration guidance
 ├── submission/              # Legacy implementation retained for traceability
-├── src/                     # Future leakage-safe implementation
-├── scripts/                 # Future experiment entry points
-└── tests/                   # Future automated checks
+├── src/                     # Leakage-safe Stage 2 implementation
+├── scripts/                 # Manifest and LR experiment entry points
+└── tests/                   # Automated leakage and reproducibility checks
 ```
 
 `submission/` contains the original implementation used for the legacy report. It includes known reproducibility and evaluation issues documented in [PROJECT_AUDIT.md](PROJECT_AUDIT.md) and is retained only for traceability.
@@ -71,7 +71,7 @@ Development and review rules are defined in [docs/TEAM_WORKFLOW.md](docs/TEAM_WO
 
 ## Reproducibility
 
-Formal dependency locks and executable commands will be added during Stage 2. Until then, this repository records the audited baseline and experiment design only; it does not claim new model results.
+Stage 2 dependencies are locked in `requirements-stage2.txt`. Generated manifests, metrics, logs, and model artifacts remain local and ignored by Git. See [STAGE2_IMPLEMENTATION.md](STAGE2_IMPLEMENTATION.md) for commands and verified runtime details.
 
 ## Disclaimer
 

@@ -391,3 +391,17 @@ Stage 2 实现时只需要根据环境证据确定以下工程细节，不重开
 1. 实现配置/schema 校验与可重现的 `feature_hash_v1`。
 2. 生成并测试正式组隔离 split manifest，通过后才开放 train/validation 给后续流程。
 3. 实现 train-only 预处理与 A/B/C 特征生成，再以 Logistic Regression 打通阈值、指标、日志和输出协议。
+
+## 9. Stage 2 Implementation Status (2026-07-22)
+
+Stage 2 已在 `feat/core-pipeline-lr` 完成以下项目：
+
+- 严格 YAML schema 校验、仓库相对路径和锁定依赖。
+- `feature_hash_v1`、两阶段 `StratifiedGroupKFold`、确定性 fold 选择及 manifest 完整性校验。
+- Training-only median imputation、96/98 abnormal code handling、`AgeInvalidFlag` 和 A/B/C1/C2/C3 schema。
+- E1 Logistic Regression + Feature Set A、Validation 指标、Validation-only operational threshold 与 Test Set Guard。
+- 原始数据、manifest、配置、代码 commit 和运行环境的可追溯 metadata。
+
+未完成且不属于本 Stage 2 纵向切片的项目：Feature Set A/B 正式对照、class-weight 消融、RF/BRF/XGBoost 集成、调参、Independent Test 模型评价和 presentation artifacts。
+
+Stage 3 入口条件：Draft PR 完成对 manifest SHA、Feature Set B 合同、评价 API、Test Guard 和自动化测试的审查；之后其他模型才能共用同一 manifest 和 preprocessing contract。核心模型仍为 LR、RF、BRF、XGBoost，LightGBM 仍仅为 optional/legacy appendix。
