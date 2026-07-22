@@ -87,6 +87,7 @@ split:
 
 preprocessing:
   fit_scope: training_only
+  abnormal_delinquency_strategy: missing_plus_flag
   abnormal_delinquency:
     columns:
       - NumberOfTime30-59DaysPastDueNotWorse

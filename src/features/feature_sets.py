@@ -7,12 +7,12 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
-QUALITY_FLAGS = (
+COMMON_QUALITY_FLAGS = (
     "MonthlyIncomeMissingFlag",
     "DependentsMissingFlag",
-    "HasAbnormalDelinquencyCode",
     "AgeInvalidFlag",
 )
+QUALITY_FLAGS = (*COMMON_QUALITY_FLAGS[:2], "HasAbnormalDelinquencyCode", COMMON_QUALITY_FLAGS[2])
 SAFE_ENGINEERED = ("IncomePerDependent", "LogMonthlyIncome", "HighDebtFlag")
 DELINQUENCY_COLUMNS = (
     "NumberOfTime30-59DaysPastDueNotWorse",
@@ -21,8 +21,18 @@ DELINQUENCY_COLUMNS = (
 )
 
 
-def feature_set_schema(name: str, predictor_columns: Sequence[str]) -> tuple[str, ...]:
-    set_a = (*predictor_columns, *QUALITY_FLAGS)
+def quality_flags_for_strategy(strategy: str) -> tuple[str, ...]:
+    if strategy == "missing_plus_flag":
+        return QUALITY_FLAGS
+    if strategy == "keep_raw":
+        return COMMON_QUALITY_FLAGS
+    raise ValueError("strategy must be missing_plus_flag or keep_raw")
+
+
+def feature_set_schema(
+    name: str, predictor_columns: Sequence[str], strategy: str = "missing_plus_flag"
+) -> tuple[str, ...]:
+    set_a = (*predictor_columns, *quality_flags_for_strategy(strategy))
     set_b = (*set_a, *SAFE_ENGINEERED)
     schemas = {
         "A": set_a,
@@ -40,8 +50,9 @@ def build_feature_set(
     cleaned: pd.DataFrame,
     name: str,
     predictor_columns: Sequence[str],
+    strategy: str = "missing_plus_flag",
 ) -> pd.DataFrame:
-    expected_a = feature_set_schema("A", predictor_columns)
+    expected_a = feature_set_schema("A", predictor_columns, strategy)
     missing = set(expected_a).difference(cleaned.columns)
     if missing:
         raise ValueError(f"Cleaned frame is missing required columns: {sorted(missing)}")
@@ -59,7 +70,7 @@ def build_feature_set(
             + 3.0 * features[DELINQUENCY_COLUMNS[1]]
             + 5.0 * features[DELINQUENCY_COLUMNS[2]]
         )
-    schema = feature_set_schema(name, predictor_columns)
+    schema = feature_set_schema(name, predictor_columns, strategy)
     features = features.loc[:, list(schema)]
     values = features.to_numpy(dtype="float64")
     if not np.isfinite(values).all():

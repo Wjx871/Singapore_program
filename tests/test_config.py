@@ -29,6 +29,10 @@ def test_split_ratios_sum_to_one(config):
         (lambda raw: raw["models"]["core_models"].append("lightgbm"), "exactly"),
         (lambda raw: raw["test_access"].update(test_evaluation_enabled=True), "requires"),
         (lambda raw: raw["preprocessing"]["winsorization"].update(enabled=True), "disabled"),
+        (
+            lambda raw: raw["preprocessing"].update(abnormal_delinquency_strategy="zero_fill"),
+            "missing_plus_flag or keep_raw",
+        ),
     ],
 )
 def test_invalid_config_is_rejected(config, mutation, message):

@@ -76,6 +76,7 @@ def validate_config(raw: dict[str, Any]) -> None:
         "reproducibility.split_seed_test",
         "reproducibility.split_seed_validation",
         "preprocessing.abnormal_delinquency.abnormal_values",
+        "preprocessing.abnormal_delinquency_strategy",
         "feature_hash.version",
         "split.ratios",
         "feature_sets",
@@ -133,6 +134,11 @@ def validate_config(raw: dict[str, Any]) -> None:
         raise ValueError("Stage 2 requires test_evaluation_enabled: false")
     if _require(raw, "preprocessing.winsorization.enabled") is not False:
         raise ValueError("Stage 2 baseline requires clipping/winsorization disabled")
+    strategy = _require(raw, "preprocessing.abnormal_delinquency_strategy")
+    if strategy not in {"missing_plus_flag", "keep_raw"}:
+        raise ValueError(
+            "preprocessing.abnormal_delinquency_strategy must be missing_plus_flag or keep_raw"
+        )
     if _require(raw, "feature_hash.version") != "feature_hash_v1":
         raise ValueError("Feature hash version must be feature_hash_v1")
 
