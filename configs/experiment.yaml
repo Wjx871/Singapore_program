@@ -18,6 +18,9 @@ data:
   id_column: row_id
   official_test_used_for_metrics: false
   use_all_labeled_rows: true
+  expected_labeled_rows: 150000
+  expected_raw_columns: 12
+  expected_official_test_rows: 101503
   predictor_columns:
     - RevolvingUtilizationOfUnsecuredLines
     - age
@@ -50,7 +53,7 @@ feature_hash:
 
 split:
   method: two_stage_stratified_group_kfold
-  groups_column: feature_hash
+  groups_column: feature_hash_v1
   n_splits: 5
   shuffle: true
   ratios:
@@ -62,6 +65,7 @@ split:
     criteria:
       - absolute_sample_fraction_error
       - absolute_positive_rate_error
+      - absolute_group_fraction_error
       - lowest_fold_index
   tolerances:
     sample_fraction_absolute: 0.005
@@ -77,7 +81,7 @@ split:
   manifest_columns:
     - row_id
     - split
-    - feature_hash
+    - feature_hash_v1
     - target
   manifest_target_source_column: SeriousDlqin2yrs
 
@@ -109,9 +113,10 @@ preprocessing:
     invalid_rule: value_less_than_or_equal_to_zero
     invalid_to_missing: true
     imputation: median
-    add_indicator: false
+    add_indicator: true
+    indicator_column: AgeInvalidFlag
   winsorization:
-    enabled: true
+    enabled: false
     fit_scope: training_only
     lower_quantile: null
     upper_quantile: 0.99
@@ -131,6 +136,7 @@ feature_sets:
       - MonthlyIncomeMissingFlag
       - DependentsMissingFlag
       - HasAbnormalDelinquencyCode
+      - AgeInvalidFlag
     include_delinquency_score: false
   B_safe_engineered:
     purpose: main_model_comparison
@@ -165,15 +171,25 @@ class_imbalance:
     compare: [1.0, training_partition_negative_to_positive_ratio]
 
 models:
+  core_models:
+    - logistic_regression
+    - random_forest
+    - balanced_random_forest
+    - xgboost
   integration_order:
     - logistic_regression
     - random_forest
     - balanced_random_forest
     - xgboost
   logistic_regression:
-    c_values: [0.03, 0.1, 0.3, 1.0, 3.0]
-    penalties: [l2]
-    max_iter: 5000
+    baseline:
+      C: 1.0
+      penalty: l2
+      solver: liblinear
+      class_weight: balanced
+      max_iter: 5000
+      random_state: 42
+    optional_training_only_cv_c_values: [0.03, 0.1, 0.3, 1.0, 3.0]
   random_forest:
     n_estimators: [300, 600]
     max_depth: [null, 12]
@@ -205,7 +221,7 @@ cross_validation:
   n_splits: 5
   shuffle: true
   random_state: 44
-  groups_column: feature_hash
+  groups_column: feature_hash_v1
   primary_scoring: average_precision
 
 metrics:
@@ -259,6 +275,7 @@ early_stopping:
   best_iteration_source: validation
 
 test_access:
+  test_evaluation_enabled: false
   policy: sealed_after_manifest_generation
   development_runner_can_load_test: false
   require_frozen_evaluation_specification: true
@@ -276,6 +293,10 @@ runtime_measurement:
     - test_inference_microseconds_per_row
 
 outputs:
+  raw_data_summary: outputs/metadata/raw_data_summary.json
+  logistic_validation_metrics: outputs/metrics/logistic_regression_validation_metrics.json
+  logistic_validation_thresholds: outputs/metrics/logistic_regression_validation_thresholds.csv
+  logistic_run_metadata: outputs/metadata/logistic_regression_run.json
   model_comparison: outputs/metrics/model_comparison.csv
   experiment_summary: outputs/metadata/experiment_summary.json
   best_model_parameters: outputs/metadata/best_model_parameters.json

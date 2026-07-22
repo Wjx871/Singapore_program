@@ -1,0 +1,11 @@
+# Runtime used to generate the Stage 2 manifest and LR validation baseline.
+numpy==2.2.6
+pandas==2.3.3
+scikit-learn==1.7.2
+PyYAML==6.0.3
+joblib==1.5.2
+pytest==8.4.2
+
+# Locked now for later core-model integration; not imported by the Stage 2 LR slice.
+imbalanced-learn==0.14.0
+xgboost==3.0.5
