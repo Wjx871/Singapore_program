@@ -7,6 +7,7 @@ from typing import Any, Sequence
 from src.models.adapters.balanced_forest_adapter import BalancedRandomForestAdapter
 from src.models.adapters.forest_adapter import RandomForestAdapter
 from src.models.adapters.logistic_adapter import LogisticRegressionAdapter
+from src.models.adapters.xgboost_adapter import XGBoostAdapter
 from src.models.base import ModelAdapter
 from src.models.contracts import validate_model_parameters
 from src.models.registry import get_model_definition
@@ -39,4 +40,6 @@ def create_model_adapter(
         return RandomForestAdapter(validated, random_seed)
     if model_name == "balanced_random_forest":
         return BalancedRandomForestAdapter(validated, random_seed)
+    if model_name == "xgboost":
+        return XGBoostAdapter(validated, random_seed)
     raise ModelNotImplementedError(f"No adapter implementation is registered for {model_name}")

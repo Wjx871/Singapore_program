@@ -51,7 +51,7 @@ MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "xgboost": ModelDefinition(
         "xgboost",
         "gradient_boosting",
-        "contract_ready",
+        "implemented",
         False,
         True,
         True,

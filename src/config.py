@@ -153,8 +153,10 @@ def validate_config(raw: dict[str, Any]) -> None:
     if len(experiment_ids) != len(experiments) or len(set(experiment_ids)) != len(experiment_ids):
         raise ValueError("experiments must contain unique IDs")
     for item in experiments:
-        if item.get("model") != "logistic_regression":
-            raise ValueError("Stage 3 experiment matrix supports only logistic_regression")
+        if item.get("model") not in EXPECTED_CORE_MODELS:
+            raise ValueError(
+                f"Stage 3 experiment matrix supports only core models: {EXPECTED_CORE_MODELS}"
+            )
         if item.get("feature_set") not in {"A", "B"}:
             raise ValueError("Stage 3 experiment feature_set must be A or B")
         if item.get("preprocessing_strategy") not in {"missing_plus_flag", "keep_raw"}:
