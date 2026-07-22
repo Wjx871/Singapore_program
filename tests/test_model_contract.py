@@ -24,7 +24,7 @@ def test_registry_names_and_statuses():
     assert MODEL_REGISTRY["logistic_regression"].status == "implemented"
     assert MODEL_REGISTRY["random_forest"].status == "implemented"
     assert MODEL_REGISTRY["balanced_random_forest"].status == "implemented"
-    assert MODEL_REGISTRY["xgboost"].status == "contract_ready"
+    assert MODEL_REGISTRY["xgboost"].status == "implemented"
     assert MODEL_REGISTRY["lightgbm"].status == "optional_legacy"
     assert MODEL_REGISTRY["lightgbm"].core_model is False
 
@@ -39,9 +39,9 @@ def test_factory_creates_logistic_adapter():
     assert adapter.requires_scaled_features is True
 
 
-@pytest.mark.parametrize("name", ["xgboost"])
+@pytest.mark.parametrize("name", ["lightgbm"])
 def test_factory_rejects_contract_only_models(name):
-    with pytest.raises(ModelNotImplementedError, match="contract_ready"):
+    with pytest.raises(ModelNotImplementedError, match="optional_legacy"):
         create_model_adapter(name, {}, random_seed=42)
 
 

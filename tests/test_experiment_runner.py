@@ -50,10 +50,10 @@ def test_manifest_sha_guard_rejects_mismatch(experiment_config):
         runner.run(spec)
 
 
-@pytest.mark.parametrize("model_name", ["xgboost"])
+@pytest.mark.parametrize("model_name", ["lightgbm"])
 def test_contract_ready_models_fail_explicitly_at_factory(experiment_config, model_name):
     runner = SharedExperimentRunner(experiment_config.config_path)
-    with pytest.raises(ModelNotImplementedError, match="contract_ready"):
+    with pytest.raises(ModelNotImplementedError, match="optional_legacy"):
         runner.run(make_spec(experiment_config, model_name=model_name))
 
 
