@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
+from src.models.adapters.balanced_forest_adapter import BalancedRandomForestAdapter
+from src.models.adapters.forest_adapter import RandomForestAdapter
 from src.models.adapters.logistic_adapter import LogisticRegressionAdapter
 from src.models.base import ModelAdapter
 from src.models.contracts import validate_model_parameters
@@ -33,4 +35,8 @@ def create_model_adapter(
             random_seed,
             binary_feature_names=binary_feature_names,
         )
+    if model_name == "random_forest":
+        return RandomForestAdapter(validated, random_seed)
+    if model_name == "balanced_random_forest":
+        return BalancedRandomForestAdapter(validated, random_seed)
     raise ModelNotImplementedError(f"No adapter implementation is registered for {model_name}")
