@@ -20,6 +20,7 @@ from src.models.adapters.xgboost_contract import compute_training_scale_pos_weig
 from src.models.contracts import validate_model_parameters
 from src.models.factory import ModelNotImplementedError, create_model_adapter
 from src.models.registry import MODEL_REGISTRY
+from src.utils.reproducibility import package_versions
 
 
 # ---------------------------------------------------------------------------
@@ -384,3 +385,9 @@ class TestReproducibility:
         features, target, features_val, target_val = synthetic_data
         adapter = _fit_xgb(features, target, features_val, target_val)
         assert adapter.get_training_metadata()["groups_supplied"] is False
+
+    def test_package_versions_includes_xgboost(self):
+        versions = package_versions()
+        assert "xgboost" in versions
+        assert versions["xgboost"] != "not-installed"
+        assert "imbalanced-learn" in versions
