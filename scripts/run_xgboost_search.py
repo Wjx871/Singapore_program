@@ -122,16 +122,25 @@ def select_best_candidate(results: list[dict[str, Any]]) -> dict[str, Any]:
     """
     candidate_order = [c["id"] for c in CANDIDATE_MATRIX]
 
+    if not results:
+        raise ValueError("Cannot select best candidate from empty results")
+
+    # Step 1 — find the maximum PR-AUC
+    best_pr_auc = max(row["pr_auc"] for row in results)
+
+    # Step 2 — keep only candidates within 1e-6 of the maximum
+    tied = [r for r in results if abs(r["pr_auc"] - best_pr_auc) <= 1e-6]
+
+    # Step 3 — apply tie-break ordering
     def sort_key(row: dict[str, Any]) -> tuple[float, ...]:
         return (
-            row["pr_auc"],
             row["roc_auc"],
             row["ks"],
             -float(row["training_time_seconds"]),  # shorter = better → larger negative
             -candidate_order.index(row["experiment_id"]),  # earlier index = better → less negative
         )
 
-    return max(results, key=sort_key)
+    return max(tied, key=sort_key)
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +160,7 @@ def main() -> None:
     output_root.mkdir(parents=True, exist_ok=True)
 
     all_results: list[dict[str, Any]] = []
+    captured_package_versions: dict[str, str] | None = None
     start_time = time.perf_counter()
 
     for candidate in CANDIDATE_MATRIX:
@@ -177,6 +187,8 @@ def main() -> None:
         runner.persist(artifacts)
 
         result = artifacts.result
+        if captured_package_versions is None:
+            captured_package_versions = dict(result.package_versions)
         metrics = result.validation_metrics
         op_metrics = result.operational_threshold_metrics
         default_metrics = result.default_threshold_metrics
@@ -191,10 +203,20 @@ def main() -> None:
             "pr_auc": metrics["pr_auc"],
             "roc_auc": metrics["roc_auc"],
             "ks": metrics["ks"],
+            # --- default threshold (0.5) ---
             "default_threshold": default_metrics["threshold"],
+            "default_accuracy": default_metrics["accuracy"],
             "default_precision": default_metrics["precision"],
             "default_recall": default_metrics["recall"],
             "default_f1": default_metrics["f1"],
+            "default_specificity": default_metrics["specificity"],
+            "default_balanced_accuracy": default_metrics["balanced_accuracy"],
+            "default_predicted_positive_rate": default_metrics["predicted_positive_rate"],
+            "default_tn": default_metrics["confusion_matrix"]["tn"],
+            "default_fp": default_metrics["confusion_matrix"]["fp"],
+            "default_fn": default_metrics["confusion_matrix"]["fn"],
+            "default_tp": default_metrics["confusion_matrix"]["tp"],
+            # --- operational threshold ---
             "operational_threshold": result.operational_threshold,
             "operational_precision": op_metrics["precision"],
             "operational_recall": op_metrics["recall"],
@@ -202,10 +224,11 @@ def main() -> None:
             "operational_specificity": op_metrics["specificity"],
             "operational_balanced_accuracy": op_metrics["balanced_accuracy"],
             "operational_predicted_positive_rate": op_metrics["predicted_positive_rate"],
-            "confusion_matrix_tn": op_metrics["confusion_matrix"]["tn"],
-            "confusion_matrix_fp": op_metrics["confusion_matrix"]["fp"],
-            "confusion_matrix_fn": op_metrics["confusion_matrix"]["fn"],
-            "confusion_matrix_tp": op_metrics["confusion_matrix"]["tp"],
+            "operational_tn": op_metrics["confusion_matrix"]["tn"],
+            "operational_fp": op_metrics["confusion_matrix"]["fp"],
+            "operational_fn": op_metrics["confusion_matrix"]["fn"],
+            "operational_tp": op_metrics["confusion_matrix"]["tp"],
+            # --- runtime ---
             "training_time_seconds": result.training_time_seconds,
             "validation_inference_time_seconds": result.validation_inference_time_seconds,
             "best_iteration": meta.get("best_iteration"),
@@ -217,6 +240,7 @@ def main() -> None:
             "manifest_sha256": result.manifest_sha256,
             "config_sha256": result.config_sha256,
             "git_commit_sha": result.git_commit_sha,
+            "raw_data_sha256": result.raw_data_sha256,
         }
         all_results.append(row)
         print(f"  PR-AUC: {row['pr_auc']:.6f}  "
@@ -239,10 +263,11 @@ def main() -> None:
         "selection_metric": "validation_pr_auc",
         "selection_rule": (
             "max Validation PR-AUC; "
-            "tie-break: ROC-AUC > KS > shorter training_time > earlier experiment_id"
+            "PR-AUC diff <= 1e-6 triggers tie-break: "
+            "ROC-AUC > KS > shorter training_time > earlier CANDIDATE_MATRIX position"
         ),
         "selected_parameters": {
-            **FIXED_COMMON,
+            **{k: int(v) if isinstance(v, (int,)) else float(v) for k, v in FIXED_COMMON.items()},
             **{k: v for k, v in selected_candidate.items() if k != "id"},
         },
         "validation_metrics": {
@@ -250,11 +275,22 @@ def main() -> None:
             "roc_auc": selected["roc_auc"],
             "ks": selected["ks"],
         },
+        "default_threshold": 0.5,
         "default_threshold_metrics": {
             "threshold": 0.5,
+            "accuracy": selected["default_accuracy"],
             "precision": selected["default_precision"],
             "recall": selected["default_recall"],
             "f1": selected["default_f1"],
+            "specificity": selected["default_specificity"],
+            "balanced_accuracy": selected["default_balanced_accuracy"],
+            "predicted_positive_rate": selected["default_predicted_positive_rate"],
+            "confusion_matrix": {
+                "tn": selected["default_tn"],
+                "fp": selected["default_fp"],
+                "fn": selected["default_fn"],
+                "tp": selected["default_tp"],
+            },
         },
         "operational_threshold": selected["operational_threshold"],
         "operational_metrics": {
@@ -265,19 +301,22 @@ def main() -> None:
             "balanced_accuracy": selected["operational_balanced_accuracy"],
             "predicted_positive_rate": selected["operational_predicted_positive_rate"],
             "confusion_matrix": {
-                "tn": selected["confusion_matrix_tn"],
-                "fp": selected["confusion_matrix_fp"],
-                "fn": selected["confusion_matrix_fn"],
-                "tp": selected["confusion_matrix_tp"],
+                "tn": selected["operational_tn"],
+                "fp": selected["operational_fp"],
+                "fn": selected["operational_fn"],
+                "tp": selected["operational_tp"],
             },
         },
         "best_iteration": selected["best_iteration"],
+        "best_score": selected["best_score"],
         "scale_pos_weight": selected["scale_pos_weight"],
         "training_time_seconds": selected["training_time_seconds"],
         "inference_time_seconds": selected["validation_inference_time_seconds"],
+        "raw_data_sha256": selected["raw_data_sha256"],
         "manifest_sha256": selected["manifest_sha256"],
         "config_sha256": selected["config_sha256"],
         "git_commit_sha": selected["git_commit_sha"],
+        "package_versions": captured_package_versions,
     }
     (output_root / "selected_candidate.json").write_text(
         json.dumps(selected_payload, indent=2, allow_nan=False) + "\n",
