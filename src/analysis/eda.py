@@ -40,6 +40,35 @@ from src.utils.reproducibility import git_commit_sha, package_versions, sha256_f
 RAW_AUDIT_SCOPE = "raw_audit"
 TRAIN_SCOPE = "train"
 SUPPORTED_SCOPES = (RAW_AUDIT_SCOPE, TRAIN_SCOPE)
+EXPECTED_TRAIN_ROWS = 95_995
+
+SENSITIVITY_EXPERIMENTS = {
+    "missing_plus_flag": {
+        "experiment_id": "lr_b_balanced_missing_flag",
+        "feature_count": 17,
+    },
+    "keep_raw": {
+        "experiment_id": "lr_b_balanced_keep_raw",
+        "feature_count": 16,
+    },
+}
+
+SENSITIVITY_FINITE_COLUMNS = (
+    "pr_auc",
+    "roc_auc",
+    "ks",
+    "default_precision",
+    "default_recall",
+    "default_f1",
+    "default_predicted_positive_rate",
+    "operational_threshold",
+    "operational_precision",
+    "operational_recall",
+    "operational_f1",
+    "operational_predicted_positive_rate",
+    "training_time_seconds",
+    "validation_inference_time_seconds",
+)
 
 DISPLAY_NAMES = {
     "RevolvingUtilizationOfUnsecuredLines": "Revolving utilization",
@@ -78,6 +107,16 @@ def validate_scope(scope: str) -> str:
     return scope
 
 
+def repository_relative_path(path: str | Path, project_root: Path) -> str:
+    """Return a portable repository-relative path or reject an external path."""
+    resolved = Path(path).expanduser().resolve()
+    root = project_root.expanduser().resolve()
+    try:
+        return resolved.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise ValueError(f"Path is outside the repository root: {resolved}") from exc
+
+
 def load_eda_dataset(
     config_path: str | Path = "configs/experiment.yaml",
     *,
@@ -92,7 +131,9 @@ def load_eda_dataset(
         metadata = {
             "split": None,
             "data_level": "raw labeled data before preprocessing",
-            "source_path": str(config.labeled_path),
+            "source_path": repository_relative_path(
+                config.labeled_path, config.project_root
+            ),
             "source_sha256": config.data["raw_labeled_sha256"],
             "label_usage": "predeclared dataset audit only",
         }
@@ -109,6 +150,9 @@ def load_eda_dataset(
         hashes = partition.feature_hash_v1
         metadata = {
             **partition.split_metadata,
+            "source_path": repository_relative_path(
+                config.labeled_path, config.project_root
+            ),
             "source_sha256": config.data["raw_labeled_sha256"],
             "label_usage": "frozen Training partition only",
         }
@@ -172,18 +216,21 @@ def build_validation_checks(
         ),
         _check_row(
             "row_count",
-            passed=(
-                len(frame) == int(config.data["expected_labeled_rows"])
+            passed=len(frame)
+            == (
+                int(config.data["expected_labeled_rows"])
                 if dataset.scope == RAW_AUDIT_SCOPE
-                else len(frame) > 0
+                else EXPECTED_TRAIN_ROWS
             ),
             expected=(
                 int(config.data["expected_labeled_rows"])
                 if dataset.scope == RAW_AUDIT_SCOPE
-                else "non-empty frozen Training partition"
+                else EXPECTED_TRAIN_ROWS
             ),
             observed=len(frame),
-            details="Raw audit covers the locked file; Training size is determined by the manifest.",
+            details=(
+                "Raw audit and frozen Training row counts must match their exact contracts."
+            ),
         ),
         _check_row(
             "row_id_complete_and_unique",
@@ -346,22 +393,28 @@ def build_abnormal_code_tables(
     abnormal_cfg = config.raw["preprocessing"]["abnormal_delinquency"]
     columns = list(abnormal_cfg["columns"])
     values = list(abnormal_cfg["abnormal_values"])
+    include_target_statistics = dataset.scope == TRAIN_SCOPE
     count_rows: list[dict[str, object]] = []
     for column in columns:
         for code in values:
             mask = frame[column] == code
             affected = int(mask.sum())
-            positives = int(frame.loc[mask, target].sum())
-            count_rows.append(
-                {
-                    "feature": column,
-                    "code": code,
-                    "affected_rows": affected,
-                    "row_rate": affected / len(frame),
-                    "target_1": positives,
-                    "positive_rate": positives / affected if affected else np.nan,
-                }
-            )
+            row: dict[str, object] = {
+                "feature": column,
+                "code": code,
+                "affected_rows": affected,
+                "row_rate": affected / len(frame),
+            }
+            if include_target_statistics:
+                positives = int(frame.loc[mask, target].sum())
+                row.update(
+                    {
+                        "target_0": affected - positives,
+                        "target_1": positives,
+                        "positive_rate": positives / affected if affected else np.nan,
+                    }
+                )
+            count_rows.append(row)
     summary_rows: list[dict[str, object]] = []
     for label, codes in [(str(code), [code]) for code in values] + [
         ("_or_".join(str(code) for code in values), values)
@@ -371,17 +424,21 @@ def build_abnormal_code_tables(
         for code in codes:
             all_same_mask |= frame[columns].eq(code).all(axis=1)
         affected = int(any_mask.sum())
-        positives = int(frame.loc[any_mask, target].sum())
-        summary_rows.append(
-            {
-                "code": label,
-                "unique_affected_rows": affected,
-                "all_three_fields_same_code_rows": int(all_same_mask.sum()),
-                "target_0": affected - positives,
-                "target_1": positives,
-                "positive_rate": positives / affected if affected else np.nan,
-            }
-        )
+        row = {
+            "code": label,
+            "unique_affected_rows": affected,
+            "all_three_fields_same_code_rows": int(all_same_mask.sum()),
+        }
+        if include_target_statistics:
+            positives = int(frame.loc[any_mask, target].sum())
+            row.update(
+                {
+                    "target_0": affected - positives,
+                    "target_1": positives,
+                    "positive_rate": positives / affected if affected else np.nan,
+                }
+            )
+        summary_rows.append(row)
     return pd.DataFrame(count_rows), pd.DataFrame(summary_rows)
 
 
@@ -502,24 +559,81 @@ def build_preprocessing_sensitivity(
     return pd.DataFrame(rows)
 
 
-def load_model_sensitivity_reference(project_root: Path) -> pd.DataFrame | None:
-    """Load the formal code-generated LR 96/98 comparison when available."""
+def load_model_sensitivity_reference(config: ExperimentConfig) -> pd.DataFrame:
+    """Load and strictly validate the shared Validation-only LR comparison."""
+    project_root = config.project_root
     path = project_root / "outputs" / "comparisons" / "abnormal_code_sensitivity.csv"
     if not path.is_file():
-        return None
+        raise FileNotFoundError(
+            "Required sensitivity result is missing: "
+            f"{path.relative_to(project_root).as_posix()}. "
+            "Run scripts.run_lr_ablations first or use --skip-strategy-sensitivity."
+        )
     frame = pd.read_csv(path)
     required = {
         "experiment_id",
+        "model_name",
+        "feature_set",
         "preprocessing_strategy",
-        "pr_auc",
-        "roc_auc",
-        "ks",
+        "class_weight",
+        "feature_count",
         "manifest_sha256",
+        "config_sha256",
+        *SENSITIVITY_FINITE_COLUMNS,
     }
     missing = required.difference(frame.columns)
     if missing:
         raise ValueError(f"Model sensitivity output is missing columns: {sorted(missing)}")
+
+    violations: list[str] = []
+    expected_strategies = set(SENSITIVITY_EXPERIMENTS)
+    actual_strategies = set(frame["preprocessing_strategy"].astype(str))
+    if len(frame) != len(expected_strategies) or actual_strategies != expected_strategies:
+        violations.append(
+            "preprocessing_strategy must contain exactly one missing_plus_flag and one keep_raw row"
+        )
+    if frame["preprocessing_strategy"].duplicated().any():
+        violations.append("preprocessing_strategy rows must be unique")
+    if set(frame["model_name"].astype(str)) != {"logistic_regression"}:
+        violations.append("model_name must be logistic_regression")
+    if set(frame["feature_set"].astype(str)) != {"B"}:
+        violations.append("feature_set must be B")
+    if set(frame["class_weight"].astype(str)) != {"balanced"}:
+        violations.append("class_weight must be balanced")
+    expected_manifest = config.raw["split"]["frozen_manifest_sha256"]
+    if set(frame["manifest_sha256"].astype(str)) != {expected_manifest}:
+        violations.append("manifest_sha256 does not match the frozen manifest")
+    if set(frame["config_sha256"].astype(str)) != {config.config_sha256}:
+        violations.append("config_sha256 does not match the loaded configuration")
+
+    if actual_strategies == expected_strategies and not frame[
+        "preprocessing_strategy"
+    ].duplicated().any():
+        indexed = frame.set_index("preprocessing_strategy")
+        for strategy, expected in SENSITIVITY_EXPERIMENTS.items():
+            row = indexed.loc[strategy]
+            if str(row["experiment_id"]) != expected["experiment_id"]:
+                violations.append(
+                    f"{strategy} experiment_id must be {expected['experiment_id']}"
+                )
+            feature_count = pd.to_numeric(
+                pd.Series([row["feature_count"]]), errors="coerce"
+            ).iloc[0]
+            if not np.isfinite(feature_count) or feature_count != expected["feature_count"]:
+                violations.append(
+                    f"{strategy} feature_count must be {expected['feature_count']}"
+                )
+
+    numeric = frame.loc[:, list(SENSITIVITY_FINITE_COLUMNS)].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    if not np.isfinite(numeric.to_numpy(dtype="float64")).all():
+        violations.append("all configured sensitivity metrics and runtimes must be finite")
+    if violations:
+        raise ValueError("Model sensitivity contract violation: " + "; ".join(violations))
+
     result = frame.copy()
+    result.loc[:, list(SENSITIVITY_FINITE_COLUMNS)] = numeric
     result.insert(0, "source_file", path.relative_to(project_root).as_posix())
     return result
 
@@ -820,6 +934,26 @@ def _write_bilingual_notes(
     )
     noun_en = "dataset" if dataset.scope == RAW_AUDIT_SCOPE else "frozen Training partition"
     noun_zh = "数据集" if dataset.scope == RAW_AUDIT_SCOPE else "冻结的训练分区"
+    if dataset.scope == TRAIN_SCOPE:
+        abnormal_en = (
+            f"Delinquency codes 96/98 affect {int(abnormal['unique_affected_rows']):,} "
+            f"unique rows; their serious-delinquency rate is {abnormal['positive_rate']:.2%}."
+        )
+        abnormal_zh = (
+            f"逾期字段中的 96/98 异常码共影响 "
+            f"{int(abnormal['unique_affected_rows']):,} 行，"
+            f"这些记录的严重违约率为 {abnormal['positive_rate']:.2%}。"
+        )
+    else:
+        abnormal_en = (
+            f"Delinquency codes 96/98 affect {int(abnormal['unique_affected_rows']):,} "
+            "unique rows and occur together across all three delinquency fields."
+        )
+        abnormal_zh = (
+            f"逾期字段中的 96/98 异常码共影响 "
+            f"{int(abnormal['unique_affected_rows']):,} 行，"
+            "并在三个逾期字段中同时出现。"
+        )
     content = f"""# EDA Core Findings / EDA 核心结论
 
 Scope / 口径: `{dataset.scope}`
@@ -830,7 +964,7 @@ Scope / 口径: `{dataset.scope}`
 - The positive class accounts for only {positive['rate']:.3%} ({int(positive['count']):,} records), indicating severe class imbalance.
 - `MonthlyIncome` has {int(missing.loc['MonthlyIncome', 'missing_count']):,} missing values ({missing.loc['MonthlyIncome', 'missing_rate']:.2%}).
 - `NumberOfDependents` has {int(missing.loc['NumberOfDependents', 'missing_count']):,} missing values ({missing.loc['NumberOfDependents', 'missing_rate']:.2%}).
-- Delinquency codes 96/98 affect {int(abnormal['unique_affected_rows']):,} unique rows; their serious-delinquency rate is {abnormal['positive_rate']:.2%}.
+- {abnormal_en}
 - There are {int((dataset.frame['age'] <= 0).sum()):,} records with `age <= 0`.
 - Identical predictor vectors create {int(values['duplicate_predictor_excess_rows']):,} excess duplicate rows.
 - There are {int(values['conflicting_target_groups']):,} predictor-identical groups with conflicting targets.
@@ -843,7 +977,7 @@ Scope / 口径: `{dataset.scope}`
 - 正类仅占 {positive['rate']:.3%}（{int(positive['count']):,} 条），存在严重的类别不平衡。
 - `MonthlyIncome` 缺失 {int(missing.loc['MonthlyIncome', 'missing_count']):,} 条，缺失率为 {missing.loc['MonthlyIncome', 'missing_rate']:.2%}。
 - `NumberOfDependents` 缺失 {int(missing.loc['NumberOfDependents', 'missing_count']):,} 条，缺失率为 {missing.loc['NumberOfDependents', 'missing_rate']:.2%}。
-- 逾期字段中的 96/98 异常码共影响 {int(abnormal['unique_affected_rows']):,} 行，这些记录的严重违约率为 {abnormal['positive_rate']:.2%}。
+- {abnormal_zh}
 - `age <= 0` 的记录有 {int((dataset.frame['age'] <= 0).sum()):,} 条。
 - 相同 predictor 向量形成 {int(values['duplicate_predictor_excess_rows']):,} 条超额重复记录。
 - 存在 {int(values['conflicting_target_groups']):,} 个 predictor 完全相同但 target 不同的冲突组。
@@ -943,12 +1077,11 @@ def run_eda(
         tables["target_spearman_training_only.csv"] = target_spearman
     model_reference: pd.DataFrame | None = None
     if scope == TRAIN_SCOPE and include_strategy_sensitivity:
+        model_reference = load_model_sensitivity_reference(config)
         tables["preprocessing_strategy_sensitivity.csv"] = build_preprocessing_sensitivity(
             config.config_path
         )
-        model_reference = load_model_sensitivity_reference(config.project_root)
-        if model_reference is not None:
-            tables["abnormal_code_model_sensitivity.csv"] = model_reference
+        tables["abnormal_code_model_sensitivity.csv"] = model_reference
     written: list[Path] = []
     for filename, table in tables.items():
         path = tables_dir / filename
@@ -1028,7 +1161,7 @@ def run_eda(
             else "Label-conditioned analysis is restricted to the frozen Training partition."
         ),
         "source": {
-            "path": str(config.labeled_path),
+            "path": repository_relative_path(config.labeled_path, config.project_root),
             "sha256_before": raw_sha_before,
             "sha256_after": raw_sha_final,
         },

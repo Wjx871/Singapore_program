@@ -81,11 +81,29 @@ whole labeled file and a label-conditioned `train` analysis loaded only through
 the frozen-manifest Training interface. Validation and independent Test scopes
 are not available.
 
+The shared LR ablation must run before EDA when sensitivity output is enabled.
+
+Windows PowerShell:
+
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-eda.txt
 .\.venv\Scripts\python.exe -m scripts.build_split_manifest --config configs/experiment.yaml
+.\.venv\Scripts\python.exe -m scripts.run_lr_ablations --config configs/experiment.yaml
 .\.venv\Scripts\python.exe -m scripts.run_eda --config configs/experiment.yaml --scope all
 ```
+
+macOS/Linux:
+
+```bash
+./.venv/bin/python -m pip install -r requirements-eda.txt
+./.venv/bin/python -m scripts.build_split_manifest --config configs/experiment.yaml
+./.venv/bin/python -m scripts.run_lr_ablations --config configs/experiment.yaml
+./.venv/bin/python -m scripts.run_eda --config configs/experiment.yaml --scope all
+```
+
+For a plot-only run before the shared LR ablation is available, pass
+`--skip-strategy-sensitivity`; otherwise a missing or contract-invalid shared
+sensitivity file stops the EDA run.
 
 Generated tables, figures, bilingual PPT notes, and run metadata are written to
 `outputs/eda/` and remain uncommitted. See [docs/EDA_OUTPUT_SPEC.md](docs/EDA_OUTPUT_SPEC.md)

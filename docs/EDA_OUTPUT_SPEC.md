@@ -58,9 +58,16 @@ outputs/eda/<scope>/
 ```
 
 The `train` scope additionally emits `target_spearman_training_only.csv` and,
-when enabled, a Feature Set B `preprocessing_strategy_sensitivity.csv`. If the shared LR runner
-has produced `outputs/comparisons/abnormal_code_sensitivity.csv`, a validated
-copy is organized as `abnormal_code_model_sensitivity.csv`.
+when enabled, a Feature Set B `preprocessing_strategy_sensitivity.csv`. The
+required shared LR result at `outputs/comparisons/abnormal_code_sensitivity.csv`
+is organized as `abnormal_code_model_sensitivity.csv` after validation.
+
+`raw_audit` abnormal-code tables contain occurrence fields only. `target_0`,
+`target_1`, and `positive_rate` are emitted only by the `train` scope. When
+sensitivity is enabled, the shared comparison file is required and must match
+the frozen manifest SHA, current config SHA, Logistic Regression, Feature Set B,
+balanced class weight, the two declared strategy/experiment pairs, and finite
+metric/runtime values. A missing or non-conforming file fails the run explicitly.
 
 ## Output rules
 
@@ -72,6 +79,9 @@ copy is organized as `abnormal_code_model_sensitivity.csv`.
   source values and tabular summaries are never modified.
 - Every run records raw-data hash, manifest metadata, configuration hash, Git
   commit, package versions, file hashes, and validation status.
+- Metadata source paths and CLI output directories are repository-relative and
+  portable; machine-specific absolute paths are forbidden.
+- The frozen Training EDA contract requires exactly 95,995 rows.
 - A failed ERROR-level validation stops the run before the bundle is accepted.
 - Formal model metrics are read only from shared code-generated comparison files;
   EDA code does not recompute Validation/Test model results.

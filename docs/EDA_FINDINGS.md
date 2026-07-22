@@ -31,9 +31,9 @@ Missingness is concentrated in two fields:
 | NumberOfDependents | 3,924 | 2.62% |
 
 Codes 96/98 occur together across all three delinquency fields and affect 269
-unique raw rows. The raw-audit positive rate for those rows is 54.65%. This is a
-first-stage descriptive observation only; because it is label-conditioned on the
-whole labeled file, it is not used directly to choose the handling strategy.
+unique raw rows. The Raw abnormal-code tables report occurrence counts and rates
+only; they intentionally contain no target counts or positive rates. Any
+label-conditioned interpretation is restricted to the frozen Training partition.
 
 Additional data-quality findings are:
 
