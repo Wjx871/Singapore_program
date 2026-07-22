@@ -20,7 +20,7 @@ from src.experiments.contracts import ExperimentSpec
 from src.experiments.result_schema import ExperimentResult
 from src.features.feature_sets import build_feature_set, quality_flags_for_strategy
 from src.features.preprocessing import CreditRiskPreprocessor
-from src.models.logistic_regression import build_logistic_pipeline
+from src.models.factory import create_model_adapter
 from src.utils.reproducibility import git_commit_sha, package_versions, set_random_seeds, sha256_file
 
 
@@ -71,6 +71,12 @@ class SharedExperimentRunner:
         self._validate_spec_paths(spec)
         set_random_seeds(spec.random_seed)
         config = self.config
+        adapter = create_model_adapter(
+            spec.model_name,
+            self._resolve_model_parameters(spec),
+            random_seed=spec.random_seed,
+            binary_feature_names=quality_flags_for_strategy(spec.preprocessing_strategy),
+        )
         preprocessing_cfg = config.raw["preprocessing"]
         cleaner = CreditRiskPreprocessor(
             predictor_columns=config.predictor_columns,
@@ -105,20 +111,26 @@ class SharedExperimentRunner:
         if not np.isfinite(x_test_schema_only.to_numpy()).all():
             raise RuntimeError("Test transform contains NaN or infinity")
 
-        parameters = dict(config.raw["models"]["logistic_regression"]["baseline"])
-        parameters["class_weight"] = None if spec.class_weight == "none" else "balanced"
-        parameters["random_state"] = spec.random_seed
-        pipeline = build_logistic_pipeline(
-            parameters,
-            feature_names=x_train.columns,
-            binary_feature_names=quality_flags_for_strategy(spec.preprocessing_strategy),
-        )
         target = config.data["target_column"]
-        fit_started = time.perf_counter()
-        pipeline.fit(x_train, self.partitions["train"][target].to_numpy())
-        training_time = time.perf_counter() - fit_started
+        y_train = self.partitions["train"][target].to_numpy()
+        y_validation = self.partitions["validation"][target].to_numpy()
+        fit_kwargs: dict[str, object] = {
+            "feature_names": list(x_train.columns),
+            "groups": self.partitions["train"]["feature_hash_v1"].to_numpy(),
+        }
+        if adapter.supports_validation_data:
+            fit_kwargs.update(
+                {
+                    "x_validation": x_validation,
+                    "y_validation": y_validation,
+                    "validation_split_name": "validation",
+                }
+            )
+        adapter.fit(x_train, y_train, **fit_kwargs)
+        training_metadata = adapter.get_training_metadata()
+        training_time = float(training_metadata["training_time_seconds"])
         inference_started = time.perf_counter()
-        validation_probability = pipeline.predict_proba(x_validation)[:, 1]
+        validation_probability = adapter.predict_proba(x_validation)
         inference_time = time.perf_counter() - inference_started
         independent = threshold_independent_metrics(
             self.partitions["validation"][target],
@@ -157,6 +169,16 @@ class SharedExperimentRunner:
         result = ExperimentResult(
             experiment_id=spec.experiment_id,
             model_name=spec.model_name,
+            model_family=adapter.model_family,
+            model_status=adapter.model_status,
+            model_parameters=adapter.get_parameters(),
+            model_training_metadata=training_metadata,
+            imbalance_strategy=adapter.imbalance_strategy,
+            requires_scaled_features=adapter.requires_scaled_features,
+            supports_validation_data=adapter.supports_validation_data,
+            supports_early_stopping=adapter.supports_early_stopping,
+            best_iteration=training_metadata.get("best_iteration"),
+            scale_pos_weight=training_metadata.get("scale_pos_weight"),
             feature_set=spec.feature_set,
             preprocessing_strategy=spec.preprocessing_strategy,
             class_weight=spec.class_weight,
@@ -183,6 +205,15 @@ class SharedExperimentRunner:
         return ExperimentArtifacts(
             result, validation_metrics, thresholds, validation_probability.copy()
         )
+
+    def _resolve_model_parameters(self, spec: ExperimentSpec) -> dict[str, object]:
+        if spec.model_name != "logistic_regression":
+            return dict(spec.model_parameters)
+        parameters = dict(self.config.raw["models"]["logistic_regression"]["baseline"])
+        parameters.pop("random_state", None)
+        parameters["class_weight"] = None if spec.class_weight == "none" else "balanced"
+        parameters.update(spec.model_parameters)
+        return parameters
 
     def persist(
         self, artifacts: ExperimentArtifacts, *, output_root: Path | None = None

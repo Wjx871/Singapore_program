@@ -8,6 +8,7 @@ import pytest
 
 from src.experiments.contracts import ExperimentSpec
 from src.experiments.runner import SharedExperimentRunner
+from src.models.factory import ModelNotImplementedError
 
 
 def make_spec(config, **overrides):
@@ -29,7 +30,8 @@ def make_spec(config, **overrides):
 @pytest.mark.parametrize(
     ("override", "message"),
     [
-        ({"model_name": "random_forest"}, "only logistic"),
+        ({"model_name": "lightgbm"}, "optional/legacy"),
+        ({"model_name": "made_up_model"}, "Unknown model_name"),
         ({"feature_set": "C3"}, "A or B"),
         ({"preprocessing_strategy": "zero_fill"}, "missing_plus_flag"),
         ({"class_weight": "auto"}, "balanced or none"),
@@ -48,12 +50,42 @@ def test_manifest_sha_guard_rejects_mismatch(experiment_config):
         runner.run(spec)
 
 
+@pytest.mark.parametrize("model_name", ["random_forest", "balanced_random_forest", "xgboost"])
+def test_contract_ready_models_fail_explicitly_at_factory(experiment_config, model_name):
+    runner = SharedExperimentRunner(experiment_config.config_path)
+    with pytest.raises(ModelNotImplementedError, match="contract_ready"):
+        runner.run(make_spec(experiment_config, model_name=model_name))
+
+
+def test_spec_accepts_controlled_model_parameter_overrides(experiment_config):
+    spec = make_spec(experiment_config, model_parameters={"C": 0.3, "max_iter": 2000})
+    assert spec.model_parameters == {"C": 0.3, "max_iter": 2000}
+    with pytest.raises(ValueError, match="Unknown logistic_regression"):
+        make_spec(experiment_config, model_parameters={"uncontrolled": True})
+
+
+def test_spec_defaults_to_shared_feature_and_preprocessing_contract(experiment_config):
+    values = make_spec(experiment_config).__dict__.copy()
+    values.pop("feature_set")
+    values.pop("preprocessing_strategy")
+    spec = ExperimentSpec(**values)
+    assert spec.feature_set == "B"
+    assert spec.preprocessing_strategy == "missing_plus_flag"
+
+
 def test_formal_stage2_baseline_runs_and_is_json_safe(experiment_config, tmp_path):
     runner = SharedExperimentRunner(experiment_config.config_path)
     artifacts = runner.run(make_spec(experiment_config, experiment_id="stage2_reproduction"))
     payload = artifacts.result.to_dict()
     assert payload["manifest_sha256"] == experiment_config.raw["split"]["frozen_manifest_sha256"]
     assert payload["feature_count"] == 14
+    assert payload["model_family"] == "linear_model"
+    assert payload["model_status"] == "implemented"
+    assert payload["model_parameters"]["class_weight"] == "balanced"
+    assert payload["model_training_metadata"]["best_iteration"] is None
+    assert payload["requires_scaled_features"] is True
+    assert payload["supports_early_stopping"] is False
+    assert payload["scale_pos_weight"] is None
     assert payload["validation_metrics"]["pr_auc"] == pytest.approx(0.3580201248072878)
     assert payload["operational_threshold"] == pytest.approx(0.42065105523373764)
     assert "test_probability" not in json.dumps(payload).lower()

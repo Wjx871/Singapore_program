@@ -11,6 +11,16 @@ from typing import Any
 class ExperimentResult:
     experiment_id: str
     model_name: str
+    model_family: str
+    model_status: str
+    model_parameters: dict[str, Any]
+    model_training_metadata: dict[str, Any]
+    imbalance_strategy: str
+    requires_scaled_features: bool
+    supports_validation_data: bool
+    supports_early_stopping: bool
+    best_iteration: int | None
+    scale_pos_weight: float | None
     feature_set: str
     preprocessing_strategy: str
     class_weight: str

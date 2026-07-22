@@ -41,6 +41,16 @@ def test_formal_ablation_variants_run(
     assert summary["feature_count"] == feature_count
     assert summary["manifest_sha256"] == formal_runner.expected_manifest_sha256
     assert summary["operational_recall"] >= 0.75
+    if experiment_id == "matrix_b":
+        assert artifacts.result.validation_metrics["pr_auc"] == pytest.approx(
+            0.35922805526141166
+        )
+        assert artifacts.result.validation_metrics["roc_auc"] == pytest.approx(
+            0.8275835722341565
+        )
+        assert artifacts.result.validation_metrics["ks"] == pytest.approx(
+            0.5146161696230088
+        )
     assert set(artifacts.validation_metrics) == {
         "split",
         "positive_label",
