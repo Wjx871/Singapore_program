@@ -278,6 +278,7 @@ test_access:
   test_evaluation_enabled: false
   policy: sealed_after_manifest_generation
   development_runner_can_load_test: false
+  development_runner_can_transform_test_features: true
   require_frozen_evaluation_specification: true
   allow_test_for_tuning: false
   allow_test_for_threshold_selection: false

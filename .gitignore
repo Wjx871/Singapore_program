@@ -46,7 +46,7 @@ submission/dataset/
 # Outputs and models
 outputs/
 logs/
-models/
+/models/
 checkpoints/
 artifacts/
 *.joblib

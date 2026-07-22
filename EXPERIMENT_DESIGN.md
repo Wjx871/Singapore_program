@@ -306,11 +306,11 @@ Stage 2 同时生成 `data/processed/split_metadata.json`，记录：
 
 | Column | Data Type | Known Issue | Training-only Fitted Operation | Deterministic Transformation | Missing Indicator | Output Feature |
 |---|---|---|---|---|---|---|
-| `RevolvingUtilizationOfUnsecuredLines` | float64 | 极端右尾 | upper 0.99 quantile cap | clip to train cap | No | same name |
-| `age` | int64 | 1 条 `age=0`，不符业务常识 | median after invalid-to-missing | `age <= 0 -> missing` | No（仅 1 条） | `age` |
+| `RevolvingUtilizationOfUnsecuredLines` | float64 | 极端右尾 | Stage 2 baseline: none | identity; optional cap must be train-fitted | No | same name |
+| `age` | int64 | 1 条 `age=0`，不符业务常识 | median after invalid-to-missing | `age <= 0 -> missing` | Yes | `age` + `AgeInvalidFlag` |
 | `NumberOfTime30-59DaysPastDueNotWorse` | int64 | 96/98 abnormal code | median after code-to-missing | `96/98 -> missing` | aggregate abnormal flag | same name + shared flag |
-| `DebtRatio` | float64 | 极端右尾 | upper 0.99 quantile cap | clip to train cap | No | same name |
-| `MonthlyIncome` | float64 | 29,731 missing；右尾；0 可能是真实无收入 | median + upper 0.99 cap | 0 保留，不再擅自替换 | Yes | same name + `MonthlyIncomeMissingFlag` |
+| `DebtRatio` | float64 | 极端右尾 | Stage 2 baseline: none | identity; optional cap must be train-fitted | No | same name |
+| `MonthlyIncome` | float64 | 29,731 missing；右尾；0 可能是真实无收入 | median; Stage 2 cap disabled | 0 保留，不再擅自替换 | Yes | same name + `MonthlyIncomeMissingFlag` |
 | `NumberOfOpenCreditLinesAndLoans` | int64 | 无已知 missing/code issue | none | identity | No | same name |
 | `NumberOfTimes90DaysLate` | int64 | 96/98 abnormal code | median after code-to-missing | `96/98 -> missing` | aggregate abnormal flag | same name + shared flag |
 | `NumberRealEstateLoansOrLines` | int64 | 无已知 missing/code issue | none | identity | No | same name |
@@ -320,7 +320,7 @@ Stage 2 同时生成 `data/processed/split_metadata.json`，记录：
 补充规则：
 
 - missing flags 必须在 imputation 前从原始值生成。
-- upper quantile caps 在主 MVP 中固定为 0.99，只存储 training-fitted 值；不设下限 cap。
+- Stage 2 Logistic Regression baseline 默认不启用 clipping。若后续敏感性实验启用 upper quantile cap，阈值只能在 Training 上 fit 并写入 metadata。
 - Logistic Regression 的 StandardScaler 只 fit 连续/计数型特征；二值 flags 原样 passthrough。
 - tree models 使用相同清洗/特征数值，但不使用 StandardScaler。
 - 所有步骤必须放在 sklearn `Pipeline` / `ColumnTransformer` 或具有同等 `fit/transform` 语义的 custom transformer 内。
@@ -335,8 +335,9 @@ Stage 2 同时生成 `data/processed/split_metadata.json`，记录：
 - `MonthlyIncomeMissingFlag`
 - `DependentsMissingFlag`
 - `HasAbnormalDelinquencyCode`
+- `AgeInvalidFlag`
 
-共 13 个模型输入列。三个 flags 被视为数据质量保真信息，而非业务特征工程。
+共 14 个模型输入列。四个 flags 被视为数据质量保真信息，而非业务特征工程。
 
 ### Feature Set B — Safe Engineered Features
 
@@ -346,7 +347,7 @@ Stage 2 同时生成 `data/processed/split_metadata.json`，记录：
 - `LogMonthlyIncome = log1p(MonthlyIncome)`
 - `HighDebtFlag = 1[DebtRatio > 1]`
 
-共 16 个输入列，**不包含 `DelinquencyScore`**。
+共 17 个输入列，**不包含 `DelinquencyScore`**。
 
 顺序固定为：先使用 training-fitted values 完成 abnormal handling、imputation 和 clipping，再计算上述确定性派生特征。`log1p` 要求收入处理后不小于 0；若将来数据违反该条件，pipeline 应报错而不是静默修改。
 
