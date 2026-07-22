@@ -92,6 +92,7 @@ def validate_config(raw: dict[str, Any]) -> None:
         "outputs.logistic_validation_metrics",
         "outputs.logistic_validation_thresholds",
         "outputs.logistic_run_metadata",
+        "experiments",
     ]
     for path in required:
         _require(raw, path)
@@ -145,6 +146,21 @@ def validate_config(raw: dict[str, Any]) -> None:
     frozen_manifest = _require(raw, "split.frozen_manifest_sha256")
     if not isinstance(frozen_manifest, str) or len(frozen_manifest) != 64:
         raise ValueError("split.frozen_manifest_sha256 must be a 64-character SHA-256")
+    experiments = _require(raw, "experiments")
+    if not isinstance(experiments, list) or not experiments:
+        raise ValueError("experiments must be a non-empty list")
+    experiment_ids = [item.get("id") for item in experiments if isinstance(item, Mapping)]
+    if len(experiment_ids) != len(experiments) or len(set(experiment_ids)) != len(experiment_ids):
+        raise ValueError("experiments must contain unique IDs")
+    for item in experiments:
+        if item.get("model") != "logistic_regression":
+            raise ValueError("Stage 3 experiment matrix supports only logistic_regression")
+        if item.get("feature_set") not in {"A", "B"}:
+            raise ValueError("Stage 3 experiment feature_set must be A or B")
+        if item.get("preprocessing_strategy") not in {"missing_plus_flag", "keep_raw"}:
+            raise ValueError("Stage 3 experiment preprocessing strategy is invalid")
+        if item.get("class_weight") not in {"balanced", "none"}:
+            raise ValueError("Stage 3 experiment class_weight must be balanced or none")
 
 
 def load_config(path: str | Path = "configs/experiment.yaml") -> ExperimentConfig:

@@ -307,3 +307,25 @@ outputs:
   models_dir: outputs/models
   logs_dir: outputs/logs
   predictions_dir: outputs/predictions
+
+experiments:
+  - id: lr_a_balanced_missing_flag
+    model: logistic_regression
+    feature_set: A
+    preprocessing_strategy: missing_plus_flag
+    class_weight: balanced
+  - id: lr_b_balanced_missing_flag
+    model: logistic_regression
+    feature_set: B
+    preprocessing_strategy: missing_plus_flag
+    class_weight: balanced
+  - id: lr_b_none_missing_flag
+    model: logistic_regression
+    feature_set: B
+    preprocessing_strategy: missing_plus_flag
+    class_weight: none
+  - id: lr_b_balanced_keep_raw
+    model: logistic_regression
+    feature_set: B
+    preprocessing_strategy: keep_raw
+    class_weight: balanced

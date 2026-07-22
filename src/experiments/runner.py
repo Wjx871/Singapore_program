@@ -29,6 +29,7 @@ class ExperimentArtifacts:
     result: ExperimentResult
     validation_metrics: dict[str, object]
     thresholds: pd.DataFrame
+    validation_probability: np.ndarray
 
 
 class SharedExperimentRunner:
@@ -179,12 +180,15 @@ class SharedExperimentRunner:
             test_access="transform/schema/finite checks only; no Test prediction or metrics",
         )
         result.to_dict()
-        return ExperimentArtifacts(result, validation_metrics, thresholds)
-
-    def persist(self, artifacts: ExperimentArtifacts) -> dict[str, Path]:
-        output_dir = (
-            self.config.project_root / "outputs" / "experiments" / artifacts.result.experiment_id
+        return ExperimentArtifacts(
+            result, validation_metrics, thresholds, validation_probability.copy()
         )
+
+    def persist(
+        self, artifacts: ExperimentArtifacts, *, output_root: Path | None = None
+    ) -> dict[str, Path]:
+        root = output_root or (self.config.project_root / "outputs" / "experiments")
+        output_dir = root / artifacts.result.experiment_id
         output_dir.mkdir(parents=True, exist_ok=True)
         paths = {
             "validation_metrics": output_dir / "validation_metrics.json",

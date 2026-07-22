@@ -32,6 +32,7 @@ Place local dataset files according to [data/README.md](data/README.md). Do not 
 - Stage 0 Repository Audit: completed
 - Stage 1 Experiment Design: completed
 - Stage 2 Data Pipeline Implementation and Logistic Regression vertical slice: completed on `feat/core-pipeline-lr`
+- Stage 3 Shared Experiment Runner and Logistic Regression ablations: completed on `feat/shared-runner-lr-ablation`
 - Only validation results have been produced; the independent test set remains sealed for model evaluation
 
 Legacy metrics in old reports or scripts are not treated as current, verified results.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from src.experiments.contracts import ExperimentSpec
@@ -57,3 +58,24 @@ def test_formal_stage2_baseline_runs_and_is_json_safe(experiment_config, tmp_pat
     assert payload["operational_threshold"] == pytest.approx(0.42065105523373764)
     assert "test_probability" not in json.dumps(payload).lower()
     assert payload["test_access"].startswith("transform/schema")
+    paths = runner.persist(artifacts, output_root=tmp_path)
+    assert set(paths) == {"validation_metrics", "thresholds", "run_metadata"}
+    assert not list(tmp_path.rglob("*probab*"))
+
+
+def test_test_partition_changes_do_not_affect_validation(experiment_config):
+    runner = SharedExperimentRunner(experiment_config.config_path)
+    spec = make_spec(experiment_config, experiment_id="test_isolation_regression")
+    first_artifacts = runner.run(spec)
+    runner.partitions["test"].loc[:, "MonthlyIncome"] = 1e12
+    second_artifacts = runner.run(spec)
+    first = first_artifacts.result
+    second = second_artifacts.result
+    np.testing.assert_array_equal(
+        first_artifacts.validation_probability, second_artifacts.validation_probability
+    )
+    assert first.validation_metrics == second.validation_metrics
+    assert first.default_threshold_metrics == second.default_threshold_metrics
+    assert first.operational_threshold == second.operational_threshold
+    assert first.operational_threshold_metrics == second.operational_threshold_metrics
+    assert first.preprocessing_metadata["medians"] == second.preprocessing_metadata["medians"]
