@@ -74,6 +74,42 @@ Development and review rules are defined in [docs/TEAM_WORKFLOW.md](docs/TEAM_WO
 
 Stage 2 dependencies are locked in `requirements-stage2.txt`. Generated manifests, metrics, logs, and model artifacts remain local and ignored by Git. See [STAGE2_IMPLEMENTATION.md](STAGE2_IMPLEMENTATION.md) for commands and verified runtime details.
 
+## Data Analysis / EDA
+
+Member D's EDA code uses two explicit scopes: a pre-declared `raw_audit` of the
+whole labeled file and a label-conditioned `train` analysis loaded only through
+the frozen-manifest Training interface. Validation and independent Test scopes
+are not available.
+
+The shared LR ablation must run before EDA when sensitivity output is enabled.
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-eda.txt
+.\.venv\Scripts\python.exe -m scripts.build_split_manifest --config configs/experiment.yaml
+.\.venv\Scripts\python.exe -m scripts.run_lr_ablations --config configs/experiment.yaml
+.\.venv\Scripts\python.exe -m scripts.run_eda --config configs/experiment.yaml --scope all
+```
+
+macOS/Linux:
+
+```bash
+./.venv/bin/python -m pip install -r requirements-eda.txt
+./.venv/bin/python -m scripts.build_split_manifest --config configs/experiment.yaml
+./.venv/bin/python -m scripts.run_lr_ablations --config configs/experiment.yaml
+./.venv/bin/python -m scripts.run_eda --config configs/experiment.yaml --scope all
+```
+
+For a plot-only run before the shared LR ablation is available, pass
+`--skip-strategy-sensitivity`; otherwise a missing or contract-invalid shared
+sensitivity file stops the EDA run.
+
+Generated tables, figures, bilingual PPT notes, and run metadata are written to
+`outputs/eda/` and remain uncommitted. See [docs/EDA_OUTPUT_SPEC.md](docs/EDA_OUTPUT_SPEC.md)
+for the output contract and [docs/EDA_FINDINGS_BILINGUAL.md](docs/EDA_FINDINGS_BILINGUAL.md)
+for reviewed report-ready wording.
+
 ## Disclaimer
 
 This is an educational machine learning project. It must not be used as an automated lending decision system.
