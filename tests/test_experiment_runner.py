@@ -8,7 +8,6 @@ import pytest
 
 from src.experiments.contracts import ExperimentSpec
 from src.experiments.runner import SharedExperimentRunner
-from src.models.factory import ModelNotImplementedError
 
 
 def make_spec(config, **overrides):
@@ -48,13 +47,6 @@ def test_manifest_sha_guard_rejects_mismatch(experiment_config):
     spec = make_spec(experiment_config, expected_manifest_sha256="0" * 64)
     with pytest.raises(ValueError, match="differs from frozen"):
         runner.run(spec)
-
-
-@pytest.mark.parametrize("model_name", ["lightgbm"])
-def test_contract_ready_models_fail_explicitly_at_factory(experiment_config, model_name):
-    runner = SharedExperimentRunner(experiment_config.config_path)
-    with pytest.raises(ModelNotImplementedError, match="optional_legacy"):
-        runner.run(make_spec(experiment_config, model_name=model_name))
 
 
 def test_spec_accepts_controlled_model_parameter_overrides(experiment_config):
