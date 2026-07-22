@@ -35,7 +35,7 @@ def stable_json_sha256(payload: Any) -> str:
 
 
 def package_versions() -> dict[str, str]:
-    names = ["numpy", "pandas", "scikit-learn", "PyYAML", "joblib"]
+    names = ["numpy", "pandas", "scikit-learn", "PyYAML", "joblib", "xgboost", "imbalanced-learn"]
     versions: dict[str, str] = {"python": platform.python_version()}
     for name in names:
         try:

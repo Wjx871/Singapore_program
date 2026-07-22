@@ -223,6 +223,11 @@ class SharedExperimentRunner:
                 "Balanced Random Forest requires class_weight=none; "
                 "it uses internal balanced sampling only"
             )
+        elif spec.model_name == "xgboost" and spec.class_weight != "none":
+            raise ValueError(
+                "XGBoost requires class_weight=none; "
+                "it uses Training-derived scale_pos_weight for imbalance handling"
+            )
         return parameters
 
     def persist(
