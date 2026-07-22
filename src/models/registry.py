@@ -31,7 +31,7 @@ MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "random_forest": ModelDefinition(
         "random_forest",
         "bagging",
-        "contract_ready",
+        "implemented",
         False,
         False,
         False,
@@ -41,7 +41,7 @@ MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "balanced_random_forest": ModelDefinition(
         "balanced_random_forest",
         "imbalance_aware_bagging",
-        "contract_ready",
+        "implemented",
         False,
         False,
         False,

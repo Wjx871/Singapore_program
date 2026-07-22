@@ -50,7 +50,7 @@ def test_manifest_sha_guard_rejects_mismatch(experiment_config):
         runner.run(spec)
 
 
-@pytest.mark.parametrize("model_name", ["random_forest", "balanced_random_forest", "xgboost"])
+@pytest.mark.parametrize("model_name", ["xgboost"])
 def test_contract_ready_models_fail_explicitly_at_factory(experiment_config, model_name):
     runner = SharedExperimentRunner(experiment_config.config_path)
     with pytest.raises(ModelNotImplementedError, match="contract_ready"):
@@ -62,6 +62,57 @@ def test_spec_accepts_controlled_model_parameter_overrides(experiment_config):
     assert spec.model_parameters == {"C": 0.3, "max_iter": 2000}
     with pytest.raises(ValueError, match="Unknown logistic_regression"):
         make_spec(experiment_config, model_parameters={"uncontrolled": True})
+
+
+@pytest.mark.parametrize(
+    ("class_weight", "estimator_class_weight"),
+    [("none", None), ("balanced", "balanced")],
+)
+def test_random_forest_class_weight_reaches_estimator_and_result_metadata(
+    experiment_config, class_weight, estimator_class_weight
+):
+    runner = SharedExperimentRunner(experiment_config.config_path)
+    artifacts = runner.run(
+        make_spec(
+            experiment_config,
+            experiment_id=f"rf_class_weight_{class_weight}",
+            model_name="random_forest",
+            class_weight=class_weight,
+            model_parameters={"n_estimators": 5, "n_jobs": 1},
+        )
+    )
+    assert artifacts.result.class_weight == class_weight
+    assert artifacts.result.model_parameters["class_weight"] == estimator_class_weight
+
+
+def test_balanced_random_forest_rejects_external_balanced_class_weight(experiment_config):
+    runner = SharedExperimentRunner(experiment_config.config_path)
+    with pytest.raises(ValueError, match="internal balanced sampling only"):
+        runner.run(
+            make_spec(
+                experiment_config,
+                model_name="balanced_random_forest",
+                class_weight="balanced",
+                model_parameters={"n_estimators": 5, "n_jobs": 1},
+            )
+        )
+
+
+def test_balanced_random_forest_none_metadata_matches_internal_sampling(experiment_config):
+    runner = SharedExperimentRunner(experiment_config.config_path)
+    artifacts = runner.run(
+        make_spec(
+            experiment_config,
+            experiment_id="brf_internal_sampling",
+            model_name="balanced_random_forest",
+            class_weight="none",
+            model_parameters={"n_estimators": 5, "n_jobs": 1},
+        )
+    )
+    assert artifacts.result.class_weight == "none"
+    assert "class_weight" not in artifacts.result.model_parameters
+    assert artifacts.result.imbalance_strategy == "internal_balanced_sampling_no_smote"
+    assert artifacts.result.model_training_metadata["effective_sampling_strategy"] == "all"
 
 
 def test_spec_defaults_to_shared_feature_and_preprocessing_contract(experiment_config):
