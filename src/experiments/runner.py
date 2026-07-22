@@ -207,12 +207,22 @@ class SharedExperimentRunner:
         )
 
     def _resolve_model_parameters(self, spec: ExperimentSpec) -> dict[str, object]:
-        if spec.model_name != "logistic_regression":
-            return dict(spec.model_parameters)
-        parameters = dict(self.config.raw["models"]["logistic_regression"]["baseline"])
-        parameters.pop("random_state", None)
-        parameters["class_weight"] = None if spec.class_weight == "none" else "balanced"
-        parameters.update(spec.model_parameters)
+        if spec.model_name == "logistic_regression":
+            parameters = dict(self.config.raw["models"]["logistic_regression"]["baseline"])
+            parameters.pop("random_state", None)
+            parameters["class_weight"] = None if spec.class_weight == "none" else "balanced"
+            parameters.update(spec.model_parameters)
+            return parameters
+        parameters = dict(spec.model_parameters)
+        if spec.model_name == "random_forest":
+            parameters["class_weight"] = (
+                None if spec.class_weight == "none" else "balanced"
+            )
+        elif spec.model_name == "balanced_random_forest" and spec.class_weight != "none":
+            raise ValueError(
+                "Balanced Random Forest requires class_weight=none; "
+                "it uses internal balanced sampling only"
+            )
         return parameters
 
     def persist(

@@ -74,6 +74,8 @@ def test_adapter_rejects_test_as_validation(model_name, synthetic_binary_data):
     [
         ("random_forest", {"n_estimators": 0}, "positive integer"),
         ("random_forest", {"max_features": "invalid"}, "max_features"),
+        ("random_forest", {"max_features": 1.01}, r"\(0, 1\]"),
+        ("balanced_random_forest", {"max_features": 2.0}, r"\(0, 1\]"),
         ("balanced_random_forest", {"sampling_strategy": "auto"}, "must be 'all'"),
         ("balanced_random_forest", {"replacement": "yes"}, "must be boolean"),
         ("balanced_random_forest", {"class_weight": "balanced"}, "Unknown balanced_random_forest"),

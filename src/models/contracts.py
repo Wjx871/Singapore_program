@@ -72,6 +72,8 @@ def validate_model_parameters(model_name: str, parameters: dict[str, Any]) -> di
         if value not in {None, "sqrt", "log2"}:
             if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
                 raise ValueError(f"Invalid {model_name}.max_features")
+            if isinstance(value, float) and value > 1.0:
+                raise ValueError(f"{model_name}.max_features float must be in (0, 1]")
     if model_name == "balanced_random_forest":
         if "sampling_strategy" in validated and validated["sampling_strategy"] != "all":
             raise ValueError("Balanced Random Forest sampling_strategy must be 'all'")
