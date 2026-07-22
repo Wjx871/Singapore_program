@@ -419,3 +419,9 @@ Stage 3 已在 `feat/shared-runner-lr-ablation` 完成：
 基于 Validation，Stage 4/5 推荐默认为 Feature Set B + `class_weight="balanced"` + `missing_plus_flag`。B 的 PR-AUC 为 0.359228，略高于 A 的 0.358020；balanced 在同一 Recall 约束下的 operational Precision 高于 none；`keep_raw` 的 PR-AUC 为 0.304623，显著低于 `missing_plus_flag`。这些是 Validation 选择，不得根据 Independent Test 重新选择。
 
 后续 RF/BRF/XGBoost 入口条件：复用冻结 manifest、Feature Set B、`missing_plus_flag`、共享 metrics/threshold API 和 Test Guard；仅扩展 model factory/estimator adapter，不复制数据或评价流程。
+
+## 11. Stage 3.5 Model Adapter Contract Status (2026-07-22)
+
+Stage 3.5 已在 `feat/model-adapter-contract` 建立统一 `ModelAdapter`、核心模型 registry、受控参数 schema、model factory 和扩展后的 `ExperimentResult`。Logistic Regression 已通过 adapter 接入共享 Runner，仍复用原 estimator pipeline；RF、BRF 和 XGBoost 仅为 `contract_ready`，本阶段没有训练或伪造实现。LightGBM 仍为 `optional_legacy`，不能进入核心批量实验。
+
+模型成员的入口条件：从包含 Stage 3.5 合同的最新 `integration/stage2` 创建 `feat/forest-models` 或 `feat/xgboost`；只添加对应 adapter、synthetic tests 和最小 registry/factory 接线；复用冻结 manifest、Feature Set B、`missing_plus_flag`、共享评价与阈值规则；在 Draft PR 中证明未访问 Test。详细文件边界和验收方法见 `docs/MODEL_ADAPTER_HANDOFF.md`。
