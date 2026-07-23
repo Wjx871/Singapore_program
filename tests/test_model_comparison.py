@@ -342,10 +342,20 @@ def test_output_summary_contains_handoff_and_quarantine_evidence(tmp_path):
     )
     summary = json.loads(paths["summary"].read_text(encoding="utf-8"))
     assert summary["selected_experiment_id"] == "xgb_child5"
+    assert len(summary["model_results"]) == 4
+    assert {
+        result["experiment_id"] for result in summary["model_results"]
+    } == {
+        "lr_b_balanced_missing_flag",
+        "rf_b_none_missing_flag",
+        "brf_b_none_missing_flag",
+        "xgb_child5",
+    }
     assert summary["test_evaluation_performed"] is False
     assert "accidentally viewed and quarantined" in summary[
         "forest_test_quarantine_statement"
     ]
+    assert "inference-contract" in summary["forest_test_quarantine_statement"]
     assert not any("test_" in column.lower() for column in _comparison_table().columns)
 
 

@@ -511,10 +511,14 @@ def write_outputs(
             for artifact in comparison.artifacts
             if artifact.result.experiment_id == comparison.selected_experiment_id
         ),
+        "model_results": [
+            artifact.result.to_dict() for artifact in comparison.artifacts
+        ],
         "test_evaluation_performed": False,
         "forest_test_quarantine_statement": (
             "Earlier Forest Test metrics were accidentally viewed and quarantined. "
-            "They were not used for model, parameter, or threshold selection."
+            "They were not used for model, parameter, threshold, inference-contract, "
+            "or comparison decisions."
         ),
     }
     summary_path.write_text(
