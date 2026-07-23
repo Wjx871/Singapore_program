@@ -16,6 +16,7 @@ from src.evaluation.model_comparison import (
     ComparisonRun,
     build_formal_specs,
     generate_figures,
+    REFERENCE_METRICS,
     select_recommended_model,
     validate_comparison_table,
     validate_probability_alignment,
@@ -269,6 +270,15 @@ def test_reference_metric_guard_reports_reproducibility_context():
     }
     with pytest.raises(RuntimeError, match="packages=.*git_sha=.*manifest_sha"):
         validate_reference_metrics(row)
+
+
+def test_forest_references_use_deterministic_serial_inference_results():
+    rf = REFERENCE_METRICS["rf_b_none_missing_flag"]
+    brf = REFERENCE_METRICS["brf_b_none_missing_flag"]
+    assert rf["pr_auc"] == pytest.approx(0.3917880699044836)
+    assert rf["operational_threshold"] == pytest.approx(0.08617852913676516)
+    assert brf["pr_auc"] == pytest.approx(0.3853522219300526)
+    assert brf["operational_threshold"] == pytest.approx(0.4688175260543156)
 
 
 def test_selection_uses_configured_order_and_selects_xgb(experiment_config):
