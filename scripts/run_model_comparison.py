@@ -178,18 +178,49 @@ def _make_operational_bar(rows_data: list[dict], fig_dir: Path) -> Path:
     precisions = [r["operational_precision"] for r in rows_data]
     recalls = [r["operational_recall"] for r in rows_data]
     x = np.arange(len(names))
-    width = 0.35
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.bar(x - width / 2, precisions, width, label="Precision", color="#1f77b4")
-    ax.bar(x + width / 2, recalls, width, label="Recall", color="#ff7f0e")
-    ax.axhline(0.75, color="red", linestyle="--", lw=1, label="Recall ≥ 0.75 constraint")
-    ax.set_xticks(x)
-    ax.set_xticklabels(names, rotation=15, ha="right", fontsize=9)
-    ax.set_ylabel("Score")
-    ax.set_title("Operational Threshold Metrics — Validation")
-    ax.legend()
-    ax.set_ylim([0, 1])
-    fig.tight_layout()
+
+    # Operational Recall is pinned near the 0.75 constraint for every model, so a
+    # shared [0, 1] axis hides the real differences. Use two panels, each with a
+    # y-axis zoomed (with padding) to its own metric's data range.
+    def _limits(values: list[float], floor: float | None = None) -> tuple[float, float]:
+        lo, hi = min(values), max(values)
+        span = hi - lo
+        pad = span * 0.25 if span > 0 else max(abs(hi) * 0.01, 0.005)
+        low = lo - pad
+        if floor is not None:
+            low = min(low, floor - pad)
+        return low, hi + pad
+
+    fig, (ax_p, ax_r) = plt.subplots(1, 2, figsize=(12, 5))
+
+    # --- Precision panel ---
+    ax_p.bar(x, precisions, 0.6, color="#1f77b4")
+    ax_p.set_xticks(x)
+    ax_p.set_xticklabels(names, rotation=15, ha="right", fontsize=8)
+    ax_p.set_ylabel("Operational Precision")
+    ax_p.set_title("Operational Precision — Validation")
+    ax_p.set_ylim(_limits(precisions))
+    ax_p.grid(axis="y", linestyle=":", alpha=0.5)
+    for xi, val in zip(x, precisions):
+        ax_p.annotate(f"{val:.6f}", xy=(xi, val), xytext=(0, 3),
+                      textcoords="offset points", ha="center", fontsize=8)
+
+    # --- Recall panel (zoomed around the 0.75 constraint) ---
+    ax_r.bar(x, recalls, 0.6, color="#ff7f0e")
+    ax_r.axhline(0.75, color="red", linestyle="--", lw=1, label="Recall ≥ 0.75 constraint")
+    ax_r.set_xticks(x)
+    ax_r.set_xticklabels(names, rotation=15, ha="right", fontsize=8)
+    ax_r.set_ylabel("Operational Recall")
+    ax_r.set_title("Operational Recall — Validation (zoomed)")
+    ax_r.set_ylim(_limits(recalls, floor=0.75))
+    ax_r.grid(axis="y", linestyle=":", alpha=0.5)
+    ax_r.legend(fontsize=8)
+    for xi, val in zip(x, recalls):
+        ax_r.annotate(f"{val:.6f}", xy=(xi, val), xytext=(0, 3),
+                      textcoords="offset points", ha="center", fontsize=8)
+
+    fig.suptitle("Operational Threshold Metrics — Validation", fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
     path = fig_dir / "operational_bar.png"
     fig.savefig(path, dpi=150)
     plt.close(fig)
