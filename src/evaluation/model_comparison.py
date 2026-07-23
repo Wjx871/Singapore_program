@@ -697,44 +697,72 @@ def _plot_validation_metrics(table: pd.DataFrame, path: Path) -> None:
 
 
 def _plot_operational_metrics(table: pd.DataFrame, path: Path) -> None:
-    metrics = [
-        ("operational_precision", "Precision"),
-        ("operational_recall", "Recall"),
-        ("operational_specificity", "Specificity"),
-        ("operational_f1", "F1"),
-        ("operational_balanced_accuracy", "Balanced accuracy"),
-    ]
     x = np.arange(len(table))
-    width = 0.15
-    colors = ["#315D8A", "#D88A27", "#7A8F38", "#A74D6E", "#6F7782"]
-    fig, axis = plt.subplots(figsize=(12.8, 7.2))
-    for index, ((column, label), color) in enumerate(zip(metrics, colors, strict=True)):
-        positions = x + (index - 2) * width
-        axis.bar(
-            positions,
-            table[column],
-            width,
-            label=label,
-            color=color,
+    colors = [MODEL_COLORS[name] for name in table["model_name"]]
+
+    def zoomed_limits(
+        values: Sequence[float],
+        *,
+        include: float | None = None,
+    ) -> tuple[float, float]:
+        low = float(min(values))
+        high = float(max(values))
+        span = high - low
+        padding = span * 0.25 if span > 0.0 else max(abs(high) * 0.01, 0.005)
+        if include is not None:
+            low = min(low, include)
+            high = max(high, include)
+        return max(0.0, low - padding), min(1.0, high + padding)
+
+    fig, (precision_axis, recall_axis) = plt.subplots(
+        1, 2, figsize=(12.8, 7.2)
+    )
+    panels = (
+        (
+            precision_axis,
+            "operational_precision",
+            "Operational Precision",
+            None,
+        ),
+        (
+            recall_axis,
+            "operational_recall",
+            "Operational Recall",
+            0.75,
+        ),
+    )
+    for axis, column, title, required_floor in panels:
+        values = table[column].to_numpy(dtype="float64")
+        bars = axis.bar(
+            x,
+            values,
+            width=0.62,
+            color=colors,
             edgecolor="#30343B",
-            linewidth=0.5,
+            linewidth=0.6,
         )
-    axis.axhline(
+        axis.set_xticks(x, table["model_name"], rotation=16, ha="right")
+        axis.set_ylabel(title)
+        axis.set_title(f"{title} — Validation (zoomed)")
+        axis.set_ylim(zoomed_limits(values, include=required_floor))
+        axis.grid(axis="y", alpha=0.75)
+        axis.bar_label(bars, fmt="%.6f", padding=3, fontsize=9)
+
+    recall_axis.axhline(
         0.75,
         color="#30343B",
         linestyle=(0, (4, 3)),
         linewidth=1.2,
         label="Recall constraint = 0.75",
     )
-    axis.set(
-        title="Validation Metrics at Operational Thresholds",
-        ylabel="Metric value",
-        ylim=(0.0, 1.0),
+    recall_axis.legend(frameon=False, loc="lower right")
+    fig.suptitle(
+        "Validation Precision and Recall at Operational Thresholds",
+        fontsize=16,
+        fontweight="semibold",
     )
-    axis.set_xticks(x, table["model_name"])
-    axis.grid(axis="y", alpha=0.75)
-    axis.legend(frameon=False, ncol=3, loc="upper left")
-    _save_figure(fig, path)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    _save_figure(fig, path, tight=False)
 
 
 def _plot_confusion_matrices(

@@ -6,8 +6,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from src.experiments.runner import SharedExperimentRunner
 from src.evaluation.model_comparison import run_comparison, write_outputs
+from src.experiments.runner import SharedExperimentRunner
 
 
 def main() -> None:
