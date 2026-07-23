@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 import numpy as np
@@ -56,6 +57,87 @@ def test_seed_is_deterministic(model_name, synthetic_binary_data):
 
 
 @pytest.mark.parametrize("model_name", ["random_forest", "balanced_random_forest"])
+def test_predict_proba_is_serial_and_restores_training_n_jobs(
+    model_name, synthetic_binary_data, monkeypatch
+):
+    features, target = synthetic_binary_data
+    adapter = create_model_adapter(
+        model_name, {"n_estimators": 20, "n_jobs": -1}, random_seed=42
+    ).fit(features, target)
+    observed_n_jobs = []
+    native_predict = adapter.estimator.predict_proba
+
+    def observing_predict(values):
+        observed_n_jobs.append(adapter.estimator.n_jobs)
+        return native_predict(values)
+
+    monkeypatch.setattr(adapter.estimator, "predict_proba", observing_predict)
+    adapter.predict_proba(features)
+    assert observed_n_jobs == [1]
+    assert adapter.estimator.n_jobs == -1
+
+
+@pytest.mark.parametrize("model_name", ["random_forest", "balanced_random_forest"])
+def test_predict_proba_restores_n_jobs_after_native_error(
+    model_name, synthetic_binary_data, monkeypatch
+):
+    features, target = synthetic_binary_data
+    adapter = create_model_adapter(
+        model_name, {"n_estimators": 10, "n_jobs": -1}, random_seed=42
+    ).fit(features, target)
+
+    def failing_predict(_values):
+        assert adapter.estimator.n_jobs == 1
+        raise RuntimeError("synthetic inference failure")
+
+    monkeypatch.setattr(adapter.estimator, "predict_proba", failing_predict)
+    with pytest.raises(RuntimeError, match="synthetic inference failure"):
+        adapter.predict_proba(features)
+    assert adapter.estimator.n_jobs == -1
+
+
+@pytest.mark.parametrize("model_name", ["random_forest", "balanced_random_forest"])
+def test_serial_probability_hash_and_model_state_are_stable(
+    model_name, synthetic_binary_data
+):
+    features, target = synthetic_binary_data
+    adapter = create_model_adapter(
+        model_name, {"n_estimators": 20, "n_jobs": -1}, random_seed=42
+    ).fit(features, target)
+    parameters_before = adapter.estimator.get_params(deep=True)
+    importance_before = adapter.estimator.feature_importances_.copy()
+    tree_state_before = _tree_state_sha256(adapter.estimator)
+
+    first = adapter.predict_proba(features)
+    second = adapter.predict_proba(features)
+
+    np.testing.assert_array_equal(first, second)
+    assert _array_sha256(first) == _array_sha256(second)
+    assert first.shape == (len(features),)
+    assert np.isfinite(first).all()
+    assert ((first >= 0.0) & (first <= 1.0)).all()
+    assert adapter.estimator.get_params(deep=True) == parameters_before
+    np.testing.assert_array_equal(
+        adapter.estimator.feature_importances_, importance_before
+    )
+    assert _tree_state_sha256(adapter.estimator) == tree_state_before
+
+
+@pytest.mark.parametrize("model_name", ["random_forest", "balanced_random_forest"])
+def test_metadata_records_training_and_inference_parallelism(
+    model_name, synthetic_binary_data
+):
+    features, target = synthetic_binary_data
+    adapter = create_model_adapter(
+        model_name, {"n_estimators": 10, "n_jobs": -1}, random_seed=42
+    ).fit(features, target)
+    metadata = adapter.get_training_metadata()
+    assert metadata["training_n_jobs"] == -1
+    assert metadata["inference_n_jobs"] == 1
+    assert metadata["deterministic_serial_inference"] is True
+
+
+@pytest.mark.parametrize("model_name", ["random_forest", "balanced_random_forest"])
 def test_adapter_rejects_test_as_validation(model_name, synthetic_binary_data):
     features, target = synthetic_binary_data
     adapter = create_model_adapter(model_name, {"n_estimators": 5}, random_seed=42)
@@ -95,3 +177,22 @@ def test_fair_default_contracts():
     assert brf["sampling_strategy"] == "all"
     assert brf["replacement"] is True
     assert brf["bootstrap"] is False
+
+
+def _array_sha256(values):
+    array = np.ascontiguousarray(np.asarray(values))
+    return hashlib.sha256(array.view(np.uint8)).hexdigest()
+
+
+def _tree_state_sha256(estimator):
+    digest = hashlib.sha256()
+    for tree in estimator.estimators_:
+        for values in (
+            tree.tree_.value,
+            tree.tree_.threshold,
+            tree.tree_.children_left,
+            tree.tree_.children_right,
+        ):
+            array = np.ascontiguousarray(values)
+            digest.update(array.view(np.uint8))
+    return digest.hexdigest()

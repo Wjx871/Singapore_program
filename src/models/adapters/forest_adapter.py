@@ -8,6 +8,7 @@ from typing import Any, Sequence
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 
+from src.models.adapters.forest_contract import serial_forest_predict_proba
 from src.models.base import ModelAdapter
 
 
@@ -71,11 +72,14 @@ class RandomForestAdapter(ModelAdapter):
             "scale_pos_weight": None,
             "groups_supplied": groups is not None,
             "effective_random_state": self.random_seed,
+            "training_n_jobs": self.estimator.n_jobs,
+            "inference_n_jobs": 1,
+            "deterministic_serial_inference": True,
         }
         return self
 
     def predict_proba(self, features: Any) -> np.ndarray:
         if self.estimator is None:
             raise RuntimeError("RandomForestAdapter must be fitted before prediction")
-        raw = self.estimator.predict_proba(features)[:, 1]
+        raw = serial_forest_predict_proba(self.estimator, features)
         return self.validate_probability_output(raw, len(features))

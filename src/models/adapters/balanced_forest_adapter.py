@@ -8,6 +8,7 @@ from typing import Any, Sequence
 import numpy as np
 from imblearn.ensemble import BalancedRandomForestClassifier
 
+from src.models.adapters.forest_contract import serial_forest_predict_proba
 from src.models.base import ModelAdapter
 
 
@@ -76,11 +77,14 @@ class BalancedRandomForestAdapter(ModelAdapter):
             "effective_sampling_strategy": self.estimator.sampling_strategy,
             "effective_replacement": self.estimator.replacement,
             "effective_bootstrap": self.estimator.bootstrap,
+            "training_n_jobs": self.estimator.n_jobs,
+            "inference_n_jobs": 1,
+            "deterministic_serial_inference": True,
         }
         return self
 
     def predict_proba(self, features: Any) -> np.ndarray:
         if self.estimator is None:
             raise RuntimeError("BalancedRandomForestAdapter must be fitted before prediction")
-        raw = self.estimator.predict_proba(features)[:, 1]
+        raw = serial_forest_predict_proba(self.estimator, features)
         return self.validate_probability_output(raw, len(features))
