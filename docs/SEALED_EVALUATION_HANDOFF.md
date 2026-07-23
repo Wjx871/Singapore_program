@@ -28,10 +28,16 @@ interpretability.
 | `n_jobs` | -1 |
 | `random_state` | 42 |
 
-Early stopping selected `best_iteration=172`, so sealed inference must use the
-frozen 173 boosting rounds. Training imbalance handling is
-`scale_pos_weight = negative_train_count / positive_train_count =
-13.873721722962504`.
+The executor must preserve the full estimator contract:
+`n_estimators=2000`, `max_depth=4`, `learning_rate=0.05`,
+`min_child_weight=5`, `subsample=0.8`, `colsample_bytree=0.8`,
+`reg_lambda=1.0`, `early_stopping_rounds=50`, `n_jobs=-1`, and
+`random_state=42`.
+
+Early stopping selected `best_iteration=172` and
+`actual_boosting_rounds=173`. Training imbalance handling remains
+`scale_pos_weight = 89541 / 6454 = 13.873721722962504`, calculated only from
+the frozen Training target.
 
 ## 3. Frozen data and preprocessing
 
@@ -44,10 +50,17 @@ frozen 173 boosting rounds. Training imbalance handling is
 | Manifest SHA-256 | `5c7aed175ae534f22b051e0b6375469aea71c16d3f28e07a97a60dffb4d520b5` |
 | Raw data SHA-256 | `1bd46da486a5708c58c7b01a034fae2a13b327f6f7b62ea7ba4fe3b5824b24ac` |
 | Config SHA-256 | `896e0f677764c5e456b55a46791e4099fa0767865bd50e46f22df88a2572b86a` |
-| Evaluation code SHA | `2d20fe0caed9536b5706ba428ea620cd7bd4b7fa` |
+| Formal Validation comparison code SHA | `2d20fe0caed9536b5706ba428ea620cd7bd4b7fa` |
 
-The fitted Training preprocessor, feature names, and feature order must be
-reused unchanged.
+The preprocessing algorithm and feature contract must remain unchanged. Refit
+the preprocessor deterministically on frozen Training only (95,995 rows), and
+verify the resulting feature names, order, and metadata before Test prediction.
+Do not merge Validation into Training.
+
+The final sealed evaluation executor SHA is a separate governance artifact. It
+must be frozen only after the project lead implements and reviews the one-time
+sealed evaluation script. The Formal Validation comparison code SHA above must
+not be treated as the sealed executor SHA.
 
 ## 4. Frozen Validation evidence
 
@@ -56,7 +69,7 @@ reused unchanged.
 | PR-AUC | 0.401962230 |
 | ROC-AUC | 0.869935023 |
 | KS | 0.585850356 |
-| Operational threshold | **0.548155665** |
+| Operational threshold | **0.548155665398** |
 | Operational Precision | 0.238865588 |
 | Operational Recall | 0.750313676 |
 
@@ -92,12 +105,46 @@ probability or evaluation result.
 
 ## 8. One-time sealed evaluation procedure
 
-After explicit authorization, the designated executor must verify all hashes
-and versions, refit only the frozen `xgb_child5` pipeline on the authorized
-training data, use exactly 173 boosting rounds, perform one Independent Test
-prediction, apply threshold 0.548155665 unchanged, and publish one final
-evaluation report. No post-Test parameter, feature, preprocessing, threshold,
-or model change is permitted.
+After explicit authorization, the designated executor must follow this exact
+procedure:
+
+1. Refit the preprocessing algorithm deterministically on frozen Training only
+   (95,995 rows). Do not combine frozen Validation with Training.
+2. Refit the frozen `xgb_child5` pipeline on frozen Training only, using frozen
+   Validation only for early stopping as the `eval_set`.
+3. Keep the complete frozen estimator parameters, including
+   `n_estimators=2000` and `early_stopping_rounds=50`.
+4. Compute `scale_pos_weight` only from the frozen Training target:
+   `89541 / 6454 = 13.873721722962504`.
+5. Before any Independent Test prediction, assert all of the following:
+   `best_iteration=172`, `actual_boosting_rounds=173`,
+   `scale_pos_weight=13.873721722962504`, `feature_count=17`, frozen feature
+   names and order, Raw/Manifest/Config SHA values, and every package version.
+6. The executor must abort before Test prediction unless every assertion
+   passes.
+7. Only after all checks pass, execute exactly one Independent Test
+   `predict_proba`. With XGBoost 3.0.5, `predict_proba` automatically uses the
+   frozen best iteration, which means the first 173 boosting rounds.
+8. Apply the frozen Operational Threshold `0.548155665398` unchanged and
+   publish one immutable final evaluation report.
+
+In normative form: Refit the frozen `xgb_child5` pipeline on frozen Training
+only, using frozen Validation only for early stopping. Keep
+`n_estimators=2000` and `early_stopping_rounds=50`. Abort before Independent
+Test prediction unless `best_iteration=172` and
+`actual_boosting_rounds=173`. XGBoost `predict_proba` then uses the frozen best
+iteration automatically.
+
+The following alternative procedure is explicitly forbidden:
+
+- 不得合并 Training + Validation 后重新拟合；
+- 不得把 `n_estimators` 从 2000 改成 173；
+- do not recompute `scale_pos_weight` on combined samples;
+- do not use Independent Test for early stopping.
+
+Independent Test results must not be used to reselect `best_iteration`, change
+boosting rounds, recalculate the threshold, tune parameters, reselect the
+model, fit calibration, or modify features or preprocessing.
 
 ## 9. Governance evidence
 
@@ -105,9 +152,6 @@ The comparison code rejects non-Validation experiment specs, rejects result
 columns containing Test fields, validates all four models against frozen
 references, checks probability alignment to frozen Validation row order, and
 requires every confusion matrix to total 23,997 rows.
-
-Earlier Forest Test metrics were accidentally viewed and quarantined. They
-were not used for model, parameter, or threshold selection.
 
 Earlier Forest Test metrics were accidentally viewed and quarantined.
 They were not used for model, parameter, threshold, inference-contract,

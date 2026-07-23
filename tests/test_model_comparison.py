@@ -368,4 +368,13 @@ def test_committed_handoff_contains_frozen_threshold_and_no_test_metrics():
     assert "0.548155665" in text
     assert "不允许重新调整" in text or "must not be retuned" in text
     assert "Test PR-AUC" not in text
-    assert "accidentally viewed and quarantined" in text
+    assert "frozen Training only" in text
+    assert "Validation only for early stopping" in text
+    assert "n_estimators=2000" in text
+    assert "early_stopping_rounds=50" in text
+    assert "best_iteration=172" in text
+    assert "actual_boosting_rounds=173" in text
+    assert "abort before Test prediction" in text
+    assert "不得合并 Training + Validation" in text
+    assert "set n_estimators=173" not in text
+    assert text.count("accidentally viewed and quarantined") == 1
