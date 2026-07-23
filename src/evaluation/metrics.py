@@ -44,6 +44,14 @@ def threshold_independent_metrics(
     split_name: str,
 ) -> dict[str, Any]:
     require_evaluation_split(split_name)
+    return _compute_threshold_independent_metrics(y_true, probability)
+
+
+def _compute_threshold_independent_metrics(
+    y_true: object,
+    probability: object,
+) -> dict[str, Any]:
+    """Compute metrics after the caller has enforced its evaluation authorization."""
     y, probability_array = validate_binary_inputs(y_true, probability)
     result: dict[str, Any] = {
         "pr_auc": None,
@@ -69,6 +77,15 @@ def threshold_metrics(
     split_name: str,
 ) -> dict[str, Any]:
     require_evaluation_split(split_name)
+    return _compute_threshold_metrics(y_true, probability, threshold)
+
+
+def _compute_threshold_metrics(
+    y_true: object,
+    probability: object,
+    threshold: float,
+) -> dict[str, Any]:
+    """Compute threshold metrics after authorization has been enforced by the caller."""
     y, probability_array = validate_binary_inputs(y_true, probability)
     if not np.isfinite(threshold):
         raise ValueError("Threshold must be finite")

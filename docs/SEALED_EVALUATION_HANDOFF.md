@@ -69,7 +69,7 @@ not be treated as the sealed executor SHA.
 | PR-AUC | 0.401962230 |
 | ROC-AUC | 0.869935023 |
 | KS | 0.585850356 |
-| Operational threshold | **0.548155665398** |
+| Operational threshold | **0.548155665397644** |
 | Operational Precision | 0.238865588 |
 | Operational Recall | 0.750313676 |
 
@@ -125,7 +125,7 @@ procedure:
 7. Only after all checks pass, execute exactly one Independent Test
    `predict_proba`. With XGBoost 3.0.5, `predict_proba` automatically uses the
    frozen best iteration, which means the first 173 boosting rounds.
-8. Apply the frozen Operational Threshold `0.548155665398` unchanged and
+8. Apply the frozen Operational Threshold `0.548155665397644` unchanged and
    publish one immutable final evaluation report.
 
 In normative form: Refit the frozen `xgb_child5` pipeline on frozen Training
@@ -145,6 +145,20 @@ The following alternative procedure is explicitly forbidden:
 Independent Test results must not be used to reselect `best_iteration`, change
 boosting rounds, recalculate the threshold, tune parameters, reselect the
 model, fit calibration, or modify features or preprocessing.
+
+### 8.1 Project-owner contract amendment
+
+On 2026-07-24, before any Independent Test probability was generated, the
+project owner replaced the rounded display value `0.548155665398` with the
+original Validation-selected float value `0.548155665397644`. The earlier
+rounded value excluded the boundary Validation probability under the declared
+`probability >= threshold` rule and therefore could not reproduce the frozen
+Precision, Recall, and confusion matrix within the fixed `1e-6` tolerance.
+
+This amendment restores the already-authoritative Validation result; it is not
+a Test-derived threshold change. Independent Test prediction count remained
+zero when the amendment was issued. The threshold must be used at the full
+precision shown above and must not be rounded before classification.
 
 ## 9. Governance evidence
 

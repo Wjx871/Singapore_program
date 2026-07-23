@@ -40,7 +40,7 @@ On the frozen Validation partition, XGBoost candidate `xgb_child5` achieved the
 highest PR-AUC (0.401962230), ROC-AUC (0.869935023), and KS (0.585850356).
 Under the pre-declared rule that maximizes Precision subject to Recall at least
 0.75, it also achieved the highest operational Precision (0.238866) at Recall
-0.750314 and threshold 0.548155665398. It is therefore the
+0.750314 and threshold 0.548155665397644. It is therefore the
 Validation-selected model recommended for the one-time sealed evaluation.
 This conclusion does not describe Independent Test performance. No Independent
 Test metric has been computed for this report version, and the sealed executor
@@ -62,7 +62,7 @@ Forest 和 XGBoost 四类模型，并以 `average_precision_score` 计算的 PR-
 在冻结的 Validation 分区上，XGBoost 候选 `xgb_child5` 的 PR-AUC、ROC-AUC 和 KS 分别为
 0.401962230、0.869935023 和 0.585850356，均为四个模型中最高。在“Recall 不低于
 0.75 时最大化 Precision”的预声明规则下，其 Operational Threshold 为
-0.548155665398，Precision 为 0.238866，Recall 为 0.750314。因此，本项目推荐
+0.548155665397644，Precision 为 0.238866，Recall 为 0.750314。因此，本项目推荐
 `xgb_child5` 作为一次性 sealed evaluation 的 Validation 选定模型。该结论仅适用于当前
 Validation 证据，不代表 Independent Test 表现。本报告版本尚未计算任何 Independent Test 指标，sealed
 executor 也尚未实现并冻结。项目的主要价值还包括冻结的分组划分、防泄漏预处理、统一模型接口与评价框架、森林模型确定性推理、结果来源治理以及严格的测试集交接机制。
@@ -714,7 +714,7 @@ claim about Independent Test ranking or real-world lending effectiveness.
 Independent Test has not been evaluated. The project has frozen the Validation
 model recommendation, but the sealed executor has not yet been implemented,
 reviewed, and frozen. The selected threshold is fixed at
-`0.548155665398`; Independent Test must not be used to tune parameters, choose
+`0.548155665397644`; Independent Test must not be used to tune parameters, choose
 a threshold, calibrate probabilities, or reselect a model.
 
 The authorized future procedure is:
@@ -730,7 +730,7 @@ The authorized future procedure is:
 6. terminate before Test prediction if any assertion fails;
 7. execute exactly one Independent Test `predict_proba` only after all
    assertions pass;
-8. apply threshold `0.548155665398` unchanged; and
+8. apply threshold `0.548155665397644` unchanged; and
 9. after evaluation, do not alter the model, parameters, threshold, features,
    or preprocessing in response to Test outcomes.
 
@@ -935,7 +935,7 @@ as the same experiment.
 Given Validation probabilities, enumerate candidate thresholds, retain those
 with Recall at least 0.75, maximize Precision, then break ties by higher Recall
 and higher threshold. For the selected XGBoost candidate, the frozen value is
-`0.548155665398`.
+`0.548155665397644`.
 
 ## Appendix E. Reproduction Commands
 
