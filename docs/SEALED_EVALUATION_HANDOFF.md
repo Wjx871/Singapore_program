@@ -1,116 +1,124 @@
 # Sealed Evaluation Handoff
 
-> **Branch**: `feat/model-evaluation`
-> **Base**: `integration/stage2`
-> **Purpose**: Govern the sealed Independent Test set boundary and isolate legacy
-> Forest Test artifacts from the Stage 3 comparison pipeline.
+> Branch: `feat/model-evaluation`
+>
+> Base: `integration/stage2`
+>
+> Status: model selected and frozen on Validation; Independent Test remains sealed
 
-## 1. Recommended Model for Stage 3 Evaluation
+## 1. Frozen recommendation
 
-**Recommended model: XGBoost (`xgb_child5`)**
+The recommended model is **XGBoost `xgb_child5`**. Selection used only the
+frozen Validation partition and the pre-declared ordered considerations:
+PR-AUC, ROC-AUC, operational precision subject to Recall >= 0.75, runtime, and
+interpretability.
 
-Basis: highest Validation PR-AUC (0.402297) under the pre-declared
-`model_selection.ordered_considerations` rule from `configs/experiment.yaml`.
-No Independent Test metric was used for this selection. Full evidence is in
-`MODEL_COMPARISON_VALIDATION.md`.
-
-Selected parameters:
+## 2. Frozen model parameters
 
 | Parameter | Value |
 |---|---:|
-| max_depth | 4 |
-| learning_rate | 0.05 |
-| min_child_weight | 5 |
-| subsample | 0.8 |
-| colsample_bytree | 0.8 |
-| n_estimators | 2000 |
-| reg_lambda | 1.0 |
-| early_stopping_rounds | 50 |
-| n_jobs | -1 |
+| `n_estimators` | 2000 |
+| `max_depth` | 4 |
+| `learning_rate` | 0.05 |
+| `min_child_weight` | 5 |
+| `subsample` | 0.8 |
+| `colsample_bytree` | 0.8 |
+| `reg_lambda` | 1.0 |
+| `early_stopping_rounds` | 50 |
+| `n_jobs` | -1 |
+| `random_state` | 42 |
 
-Selected Validation metrics: PR-AUC 0.402297, ROC-AUC 0.869722, KS 0.586536.
+Early stopping selected `best_iteration=172`, so sealed inference must use the
+frozen 173 boosting rounds. Training imbalance handling is
+`scale_pos_weight = negative_train_count / positive_train_count =
+13.873721722962504`.
 
-Operational threshold (Validation, Recall ≥ 0.75): **0.553241**.
-Operational Precision: 0.243002, Operational Recall: 0.751568.
+## 3. Frozen data and preprocessing
 
-## 2. Independent Test Governance
-
-The Independent Test set is sealed in Stage 2 and Stage 3. The following
-actions are **not permitted** until the Technical Lead explicitly opens the
-Test evaluation gate:
-
-| Forbidden action | Enforced by |
+| Item | Value |
 |---|---|
-| `predict_proba` on Test partition | `SealedTestSetError` guard in `evaluation/guard.py` |
-| Computing any metric on Test | `require_evaluation_split("test")` raises |
-| Threshold selection on Test | Same guard |
-| Model selection on Test | Config: `allow_test_based_reselection: false` |
-| Calibration fitting on Test | Config: `allow_test_for_calibration_fit: false` |
-| Tuning on Test | Config: `allow_test_for_tuning: false` |
-| Early stopping on Test | `XGBoostAdapter` rejects `validation_split_name="test"` |
+| Feature set | B |
+| Preprocessing | `missing_plus_flag` |
+| Feature count | 17 |
+| Random seed | 42 |
+| Manifest SHA-256 | `5c7aed175ae534f22b051e0b6375469aea71c16d3f28e07a97a60dffb4d520b5` |
+| Raw data SHA-256 | `1bd46da486a5708c58c7b01a034fae2a13b327f6f7b62ea7ba4fe3b5824b24ac` |
+| Config SHA-256 | `896e0f677764c5e456b55a46791e4099fa0767865bd50e46f22df88a2572b86a` |
+| Evaluation code SHA | `2d20fe0caed9536b5706ba428ea620cd7bd4b7fa` |
 
-All six of the above are structurally enforced; they cannot be bypassed by
-editing model or evaluation code without also modifying the guard contracts.
+The fitted Training preprocessor, feature names, and feature order must be
+reused unchanged.
 
-The runner performs only three non-metric operations on Test:
+## 4. Frozen Validation evidence
 
-1. Apply the fitted preprocessor (`cleaner.transform`).
-2. Build Feature Set B features from the cleaned Test partition.
-3. Check that the resulting matrix contains no NaN or infinity.
+| Metric | Value |
+|---|---:|
+| PR-AUC | 0.401962230 |
+| ROC-AUC | 0.869935023 |
+| KS | 0.585850356 |
+| Operational threshold | **0.548155665** |
+| Operational Precision | 0.238865588 |
+| Operational Recall | 0.750313676 |
 
-No prediction probabilities or derived metrics leave the runner for the Test
-partition.
+The operational threshold is Validation-derived and must not be retuned
+(不允许重新调整) from Independent Test results.
 
-## 3. Frozen Manifest Governance
+## 5. Package contract
 
-The split manifest (`data/processed/split_manifest.csv`) is generated once
-and frozen. Its SHA-256 is stored in `configs/experiment.yaml`:
+Python 3.12.13; NumPy 2.2.6; pandas 2.3.3; scikit-learn 1.7.2;
+imbalanced-learn 0.14.0; XGBoost 3.0.5; PyYAML 6.0.3; joblib 1.5.2.
 
-```
-frozen_manifest_sha256: 5c7aed175ae534f22b051e0b6375469aea71c16d3f28e07a97a60dffb4d520b5
-```
+## 6. Forest inference contract
 
-The `SharedExperimentRunner` verifies this SHA on every instantiation and on
-every `ExperimentSpec.run()` call. Any manifest regeneration would invalidate
-the frozen SHA and all downstream experiments.
+Although XGBoost is selected, any authorized future RF or BRF reproduction or
+sealed inference must preserve the deterministic forest contract: fit with
+`n_jobs=-1`, call native `predict_proba` with temporary `n_jobs=1`, and restore
+the training value in `finally`. This is an execution-order contract, not a
+parameter change.
 
-## 4. Isolation of Legacy Forest Test Artifacts
+## 7. Independent Test prohibitions
 
-Previous development branches (`feat/forest-models`) may contain Test-partition
-artifacts (confusion matrices, metric files, probability arrays) that were
-generated under a different governance policy or an earlier test-access setting.
-Those artifacts:
+Until the project lead explicitly opens the one-time evaluation gate:
 
-- **Are not used** in the Stage 3 comparison pipeline.
-- **Are not imported** by any module under `src/evaluation/` or `scripts/`.
-- **Are not cited** in `MODEL_COMPARISON_VALIDATION.md` or other Stage 3 docs.
-- Will be reviewed and, if necessary, quarantined by the Technical Lead during
-  the PR review before `integration/stage2` merge.
+- no `predict_proba` on Independent Test;
+- no Test metric or confusion matrix;
+- no threshold selection, tuning, calibration fitting, or early stopping on Test;
+- no model reselection based on Test;
+- no reading legacy Test result files as decision evidence.
 
-The Stage 3 comparison produces exclusively Validation metrics from fresh
-`SharedExperimentRunner` runs on the frozen manifest. It does not inherit or
-replay any result from a prior branch.
+The shared runner's Test interaction is limited to transformation,
+feature-schema consistency, and finite-value checks. It produces no Test
+probability or evaluation result.
 
-## 5. When Test Can Be Opened
+## 8. One-time sealed evaluation procedure
 
-Independent Test may only be evaluated after all of the following conditions
-are met and the Technical Lead has explicitly opened the gate:
+After explicit authorization, the designated executor must verify all hashes
+and versions, refit only the frozen `xgb_child5` pipeline on the authorized
+training data, use exactly 173 boosting rounds, perform one Independent Test
+prediction, apply threshold 0.548155665 unchanged, and publish one final
+evaluation report. No post-Test parameter, feature, preprocessing, threshold,
+or model change is permitted.
 
-1. Model selection is complete and the recommended model is frozen.
-2. The operational threshold is frozen (derived from Validation only).
-3. The preprocessor and feature set are frozen (fitted on Training only).
-4. No further hyperparameter, architecture, or threshold changes are permitted
-   after Test is opened.
-5. The Technical Lead updates `test_access.test_evaluation_enabled` in
-   `configs/experiment.yaml` to `true` and removes the `SealedTestSetError`
-   guard or wraps it with an explicit gating flag.
+## 9. Governance evidence
 
-The Test evaluation must be run exactly once, producing a single final report.
-It must not be iterated to improve Test metrics.
+The comparison code rejects non-Validation experiment specs, rejects result
+columns containing Test fields, validates all four models against frozen
+references, checks probability alignment to frozen Validation row order, and
+requires every confusion matrix to total 23,997 rows.
 
-## 6. Operational Deployment Caveat
+Earlier Forest Test metrics were accidentally viewed and quarantined. They
+were not used for model, parameter, or threshold selection.
 
-The recommended model and threshold are educational ML results derived from a
-Kaggle dataset. They must not be used for real credit-risk or lending decisions.
-The model has not been audited for fairness, calibration, or regulatory
-compliance.
+Earlier Forest Test metrics were accidentally viewed and quarantined.
+They were not used for model, parameter, threshold, inference-contract,
+or comparison decisions.
+
+## 10. Ownership
+
+The project lead owns the decision to open the Independent Test gate. The
+evaluation executor owns hash/version verification and the single immutable
+run. Reviewers must reject any handoff that changes the frozen contract or
+uses Test evidence for another model-selection decision.
+
+This handoff records a Validation recommendation only. It contains no
+Independent Test metric.
